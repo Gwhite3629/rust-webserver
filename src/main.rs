@@ -2,23 +2,28 @@ use std::{
     fs,
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
+    thread,
+    time::Duration,
 };
+
+use hello::ThreadPool;
 
 fn main() {
     let listener = match TcpListener::bind("127.0.0.1:7878") {
         Ok(listener) => listener,
         Err(error) => panic!("Problem binding TcpListener: {error:?}"),
     };
+    let pool = ThreadPool::new(4);
 
-    for stream in listener.incoming() {
+    for stream in listener.incoming().take(2) {
         let _stream = match stream {
             Ok(_stream) => _stream,
             Err(error) => panic!("Error receiving packet from listener: {error:?}"),
         };
 
-        println!("Connection Established.");
-
-        handle_connection(_stream);
+        pool.execute(|| {
+            handle_connection(_stream);
+        });
     }
 }
 
@@ -27,10 +32,13 @@ fn handle_connection(mut stream: TcpStream) {
     
     let request_line = buf_reader.lines().next().unwrap().unwrap();
 
-    let (status_line, filename) = if request_line == "GET / HTTP/1.1" {
-        ("HTTP/1.1 200 OK", "hello.html")
-    } else {
-        ("HTTP/1.1 404 NOT FOUND", "404.html")
+    let (status_line, filename) = match &request_line[..] {
+        "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
+        "GET /sleep HTTP/1.1" => {
+            thread::sleep(Duration::from_secs(5));
+            ("HTTP/1.1 200 OK", "hello.html")
+        }
+        _ => ("HTTP/1.1 404 NOT FOUND", "404.html")
     };
 
     let contents = match fs::read_to_string(filename) {
