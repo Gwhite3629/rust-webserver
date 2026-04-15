@@ -44,7 +44,7 @@ fn handle_connection(mut stream: TcpStream) {
 
     println!("Request: {http_request:#?}");
 
-    println!("Processed Request:\n {request:#?}");
+    println!("Processed Request:\n{request}");
 
     let (status_line, filename) = match http_request[0].as_str() {
         "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),

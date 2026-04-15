@@ -37,7 +37,7 @@ struct Scheme {
 struct Authority {
     userinfo: String,
     host: Host,
-    port: u8,
+    port: u16,
 }
 
 // host        = IP-literal / IPv4address / reg-name 
@@ -127,7 +127,7 @@ impl URI {
                     ipv4address: Ipv4Addr::from_str(&h[1]).unwrap(), 
                     regname: String::default(),
                 },
-                port: h[2].parse::<u8>().unwrap(),
+                port: h[2].parse::<u16>().unwrap(),
             }, 
             path: Path {
                     path: s[1].clone(),
@@ -141,13 +141,13 @@ impl URI {
 impl Display for URI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!{f,
-            "Scheme: {}\n
-            Authority:\n
-            \tUserInfo: {}\n
-            \tHost:Port: {}:{}\n
-            Path: {}\n
-            Query: {}\n
-            Fragment: {}\n",
+            "\tScheme: {}\n
+\tAuthority:\n
+\t\tUserInfo: {}\n
+\t\tHost:Port: {}:{}\n
+\tPath: {}\n
+\tQuery: {}\n
+\tFragment: {}\n",
             self.scheme.scheme,
             self.authority.userinfo,
             self.authority.host.ipv4address.to_string(),

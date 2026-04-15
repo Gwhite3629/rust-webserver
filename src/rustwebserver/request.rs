@@ -26,19 +26,28 @@ impl HttpRequest {
 
     fn format_scheme(scheme: String) ->  Vec<String> {
         let formatted: Vec<String> = scheme
-            .split(' ').map(|s| s.trim())     // (2)
-            .filter(|s| !s.is_empty())        // (3)
-            .map(|s| s.parse().unwrap())      // (4)
-            .collect();                       // (5)
+            .split(' ').map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse().unwrap())
+            .collect();
+
+        for f in formatted.iter() {
+            println!("scheme line: {}", f);
+        }
+
         return formatted;
     }
 
     fn format_host(host: String) -> Vec<String> {
         let formatted: Vec<String> = host
-            .split(':').map(|s| s.trim())     // (2)
-            .filter(|s| !s.is_empty())        // (3)
-            .map(|s| s.parse().unwrap())      // (4)
+            .split(':').map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse().unwrap())
             .collect();
+
+        for f in formatted.iter() {
+            println!("host line: {}", f);
+        }
 
         return formatted;
     }
@@ -47,8 +56,10 @@ impl HttpRequest {
         let mut headers: HttpFields = HttpFields::new();
 
         for req in request.iter() {
-            let (rkey, rval) = req.split_once(':').unwrap();
-            headers.insert(rkey, rval);
+            let () = match req.split_once(": ") {
+                Some((rkey, rval)) => headers.insert(rkey, rval),
+                None => (),
+            };
         }
 
         return headers;
@@ -57,9 +68,12 @@ impl HttpRequest {
 
 impl Display for HttpRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Method: {}", self.method.to_str())?;
-        write!(f, "URI: {}", self.target.to_string())?;
-        write!(f, "Headers: {}", self.headers.to_string())?;
-        write!(f, "Content: {:#?}", self.content)
+        write!(f, "Method: {}\n", self.method.to_str())?;
+        write!(f, "URI: \n{}\n", self.target.to_string())?;
+        write!(f, "Headers: \n{}\n", self.headers.to_string())?;
+        for b in self.content.iter() {
+            write!(f,"{:x?}", b)?
+        }
+        write!(f, "\n")
     }
 }

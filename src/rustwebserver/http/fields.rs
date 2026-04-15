@@ -74,7 +74,7 @@ impl IntoIterator for HttpFields {
 impl Display for HttpFields {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (k,v) in self.iter() {
-            write!(f,"{:#?}: {:#?}\n", k, v)?
+            write!(f,"\t{}: {}\n", k, v)?
         }
         write!(f, "\n")
     }
