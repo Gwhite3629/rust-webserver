@@ -6,10 +6,10 @@ use crate::URI;
 
 #[derive(Debug)]
 pub struct HttpRequest {
-    method: HttpMethod,
-    target: URI,
-    headers: HttpFields,
-    content: Vec<u8>,
+    pub method: HttpMethod,
+    pub target: URI,
+    pub headers: HttpFields,
+    pub content: Vec<u8>,
 }
 
 impl HttpRequest {

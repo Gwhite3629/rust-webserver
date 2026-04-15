@@ -30,14 +30,15 @@ fn main() {
 }
 
 fn handle_connection(mut stream: TcpStream) {
-    let buf_reader = BufReader::new(&stream);
+    let mut buf_reader = BufReader::new(&stream);
 
     let http_request: Vec<_> = buf_reader
+        .by_ref()
         .lines()
         .map(|result| result.unwrap())
         .take_while(|line| !line.is_empty())
         .collect();
-    
+
     let request: HttpRequest = HttpRequest::new(http_request.clone());
 
     //let request_line = buf_reader.lines().next().unwrap().unwrap();
@@ -45,6 +46,20 @@ fn handle_connection(mut stream: TcpStream) {
     println!("Request: {http_request:#?}");
 
     println!("Processed Request:\n{request}");
+
+    let len = match request.headers.get("Content-length") {
+        Some(res) => res.parse::<usize>().unwrap(),
+        None => 0,
+    };
+
+    let mut content: Vec<u8> = vec![0; len];
+
+    buf_reader
+        .read_exact(&mut content).expect("read failed");
+
+    let http_string: String = String::from_utf8(content).unwrap();
+
+    println!("Content: {:#?}", http_string);
 
     let (status_line, filename) = match http_request[0].as_str() {
         "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
