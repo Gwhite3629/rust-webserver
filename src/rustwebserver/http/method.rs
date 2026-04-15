@@ -1,6 +1,6 @@
 
 
-#[derive(Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub enum HttpMethod {
     GET,
     HEAD,
@@ -16,7 +16,7 @@ pub enum HttpMethod {
 
 impl HttpMethod {
     pub fn from_str(method: &str) -> HttpMethod {
-        let method = method.to_uppsercase();
+        let method = method.to_uppercase();
         match method.as_str() {
             "GET" => HttpMethod::GET,
             "HEAD" => HttpMethod::HEAD,

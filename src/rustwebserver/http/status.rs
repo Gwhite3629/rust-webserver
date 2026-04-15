@@ -1,4 +1,4 @@
-#[derive(Clone, Copy,)]
+#[derive(Clone, Copy)]
 pub enum HttpStatus {
     // 1xx Informational response
     Continue = 100,
@@ -94,7 +94,7 @@ pub enum HttpStatus {
 }
 
 impl HttpStatus {
-    pub fn from_u16(status: u16) -> Result<HttpsStatus, &'statuc str> {
+    pub fn from_u16(status: u16) -> Result<HttpStatus, &'static str> {
         match status {
             100 => Ok(HttpStatus::Continue),
             101 => Ok(HttpStatus::SwitchingProtocols),
@@ -130,7 +130,7 @@ impl HttpStatus {
             402 => Ok(HttpStatus::PaymentRequired),
             403 => Ok(HttpStatus::Forbidden),
             404 => Ok(HttpStatus::NotFound),
-            405 => Ok(HttpStatus::MethodNotAlowed),
+            405 => Ok(HttpStatus::MethodNotAllowed),
             406 => Ok(HttpStatus::NotAcceptable),
             407 => Ok(HttpStatus::ProxyAuthenticationRequired),
             408 => Ok(HttpStatus::RequestTimeout),

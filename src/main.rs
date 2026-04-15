@@ -6,7 +6,9 @@ use std::{
     time::Duration,
 };
 
-use hello::ThreadPool;
+use rustwebserver::ThreadPool;
+
+use rustwebserver::HttpRequest;
 
 fn main() {
     let listener = match TcpListener::bind("127.0.0.1:7878") {
@@ -15,7 +17,7 @@ fn main() {
     };
     let pool = ThreadPool::new(4);
 
-    for stream in listener.incoming().take(2) {
+    for stream in listener.incoming() {
         let _stream = match stream {
             Ok(_stream) => _stream,
             Err(error) => panic!("Error receiving packet from listener: {error:?}"),
@@ -29,10 +31,22 @@ fn main() {
 
 fn handle_connection(mut stream: TcpStream) {
     let buf_reader = BufReader::new(&stream);
-    
-    let request_line = buf_reader.lines().next().unwrap().unwrap();
 
-    let (status_line, filename) = match &request_line[..] {
+    let http_request: Vec<_> = buf_reader
+        .lines()
+        .map(|result| result.unwrap())
+        .take_while(|line| !line.is_empty())
+        .collect();
+    
+    let request: HttpRequest = HttpRequest::new(http_request.clone());
+
+    //let request_line = buf_reader.lines().next().unwrap().unwrap();
+
+    println!("Request: {http_request:#?}");
+
+    println!("Processed Request:\n {request:#?}");
+
+    let (status_line, filename) = match http_request[0].as_str() {
         "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
         "GET /sleep HTTP/1.1" => {
             thread::sleep(Duration::from_secs(5));
