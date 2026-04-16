@@ -180,3 +180,42 @@ fn full_uri() {
 
     assert_eq!(http_string,"This is 21 characters");
 }
+
+lazy_static! {
+    static ref RAW_BAD_REQUEST: String = String::from("POST www.example.com:6969/foo?key=value#frag HTTP/1.1\r\nHost: 127.0.0.1:7878\r\nContent-length: 21\r\n\r\n");
+}
+lazy_static! {
+    static ref RAW_BAD_CONTENT: Vec<u8> = ("This is 21 characters").as_bytes().to_vec();
+}
+#[cfg(test)]
+#[test]
+fn improper_uri() {
+    let raw_request = RAW_BAD_REQUEST
+    .lines()
+    .map(|res| res.to_string())
+    .take_while(|line| !line.is_empty())
+    .collect();
+
+    let mut http_request: HttpRequest = HttpRequest::new(raw_request);
+
+    http_request._insert_content(RAW_BAD_CONTENT.to_vec());
+
+    let http_string: String = String::from_utf8(http_request.content).unwrap();
+
+    assert_eq!(http_request.method.as_str(),"POST");
+
+    assert_eq!(http_request.target.scheme.as_str(),"");
+    assert_eq!(http_request.target.authority.userinfo.as_str(),"");
+    assert_eq!(http_request.target.authority.host.as_str(),"www.example.com");
+    assert_eq!(http_request.target.authority.port,6969);
+    assert_eq!(http_request.target.path.as_str(),"/foo");
+    assert_eq!(http_request.target.query.as_str(),"key=value");
+    assert_eq!(http_request.target.fragment.as_str(),"frag");
+
+    assert_eq!(http_request.version.as_str(),"HTTP/1.1");
+
+    assert_eq!(http_request.headers.get("Host").unwrap(),"127.0.0.1:7878");
+    assert_eq!(http_request.headers.get("Content-length").unwrap(),"21");
+
+    assert_eq!(http_string,"This is 21 characters");
+}
