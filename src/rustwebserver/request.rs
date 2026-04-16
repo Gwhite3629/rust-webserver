@@ -8,6 +8,7 @@ use crate::URI;
 pub struct HttpRequest {
     pub method: HttpMethod,
     pub target: URI,
+    pub version: String,
     pub headers: HttpFields,
     pub content: Vec<u8>,
 }
@@ -15,15 +16,17 @@ pub struct HttpRequest {
 impl HttpRequest {
     pub fn new (request: Vec<String>) -> Self {
         let form_s = Self::format_scheme(request[0].clone());
-        let form_h = Self::format_host(request[1].clone());
+        //let form_h = Self::format_host(request[1].clone());
         return HttpRequest { 
             method: HttpMethod::from_str(&form_s[0]),
-            target: URI::new(form_s, form_h), 
-            headers: Self::format_headers(request),
+            target: URI::new(&form_s[1]),
+            version: form_s[2].clone(),
+            headers: HttpFields::populate(request),
             content: Vec::new(),
         }
     }
 
+    // First line of request always has {METHOD' 'URI' 'VERSION}
     fn format_scheme(scheme: String) ->  Vec<String> {
         let formatted: Vec<String> = scheme
             .split(' ').map(|s| s.trim())
@@ -31,14 +34,10 @@ impl HttpRequest {
             .map(|s| s.parse().unwrap())
             .collect();
 
-        for f in formatted.iter() {
-            println!("scheme line: {}", f);
-        }
-
         return formatted;
     }
 
-    fn format_host(host: String) -> Vec<String> {
+    fn _format_host(host: String) -> Vec<String> {
         let formatted: Vec<String> = host
             .split(':').map(|s| s.trim())
             .filter(|s| !s.is_empty())
@@ -51,25 +50,13 @@ impl HttpRequest {
 
         return formatted;
     }
-
-    fn format_headers(request: Vec<String>) -> HttpFields {
-        let mut headers: HttpFields = HttpFields::new();
-
-        for req in request.iter() {
-            let () = match req.split_once(": ") {
-                Some((rkey, rval)) => headers.insert(rkey, rval),
-                None => (),
-            };
-        }
-
-        return headers;
-    }
 }
 
 impl Display for HttpRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Method: {}\n", self.method.to_str())?;
         write!(f, "URI: \n{}\n", self.target.to_string())?;
+        write!(f, "Version: {}\n", self.version)?;
         write!(f, "Headers: \n{}\n", self.headers.to_string())?;
         for b in self.content.iter() {
             write!(f,"{:x?}", b)?

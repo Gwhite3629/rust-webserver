@@ -60,6 +60,18 @@ impl HttpFields {
     pub fn iter(&self) -> std::collections::hash_map::Iter<'_, CaseInsensitiveString, String> {
         self.fields.iter()
     }
+
+    pub fn populate(request: Vec<String>) -> HttpFields {
+        let mut headers: HttpFields = HttpFields::new();
+
+        for req in request.iter() {
+            let () = match req.split_once(": ") {
+                Some((rkey, rval)) => headers.insert(rkey, rval),
+                None => (),
+            };
+        }
+        return headers;
+    }
 }
 
 impl IntoIterator for HttpFields {
