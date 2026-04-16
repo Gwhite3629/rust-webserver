@@ -21,26 +21,28 @@ lazy_static! {
 
 #[derive(Debug)]
 pub struct URI {
-    scheme: Scheme,
-    authority: Authority,
-    path: Path,
-    query: Query,
-    fragment: Fragment,
+    pub scheme: Scheme,
+    pub authority: Authority,
+    pub path: Path,
+    pub query: Query,
+    pub fragment: Fragment,
 }
 
 // scheme      = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) (RFC 3986)
-#[derive(Clone, Debug)]
-struct Scheme {
-    scheme: String,
-}
+#[derive(Debug, PartialEq)]
+pub struct Scheme (String);
 
 impl Scheme {
     pub fn new(s: &String) -> Self {
         if s.is_empty() {
-            Scheme { scheme: String::new() }
+            Scheme(String::new())
         } else {
-            Scheme { scheme: s.clone() }
+            Scheme(s.clone())
         }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
     }
 }
 
@@ -50,21 +52,19 @@ impl Scheme {
 // port        = *DIGIT
 
 #[derive(Debug)]
-struct Authority {
-    userinfo: String,
-    host: String,
-    port: u16,
+pub struct Authority {
+    pub userinfo: String,
+    pub host: String,
+    pub port: u16,
 }
 
 impl Authority {
     pub fn new(s: &String) -> Self {
-
         if s.is_empty() {
             Authority {userinfo: String::new(),host: String::new(),port: 0}
         } else {
 
-
-            let uinfore: Regex = Regex::new(r"^((?<userinfo>[^/?#@]*)@)?").unwrap();
+            let uinfore: Regex = Regex::new(r"((?<userinfo>[^/?#@]*)@)?").unwrap();
             let portre: Regex = Regex::new(r"[^?#/@:](:(?<port>[0-9]+))$").unwrap();
 
             let mut infostring = match uinfore.captures(s) {
@@ -74,6 +74,8 @@ impl Authority {
                 },
                 None => String::new(),
             };
+
+            let userinfo: String = infostring.clone();
 
             let mod_s = if !infostring.is_empty() {
                 infostring.push('@');
@@ -90,6 +92,8 @@ impl Authority {
                 None => String::new(),
             };
 
+            let port: u16 = portstring.clone().parse::<u16>().unwrap();
+
             let final_s = if !portstring.is_empty() {
                 portstring.insert(0, ':');
                 mod_s.replace(portstring.as_str(), "")
@@ -97,7 +101,7 @@ impl Authority {
                 mod_s.clone()
             };
 
-            Authority { userinfo: infostring, host: final_s.clone(), port: portstring.parse::<u16>().unwrap() }
+            Authority { userinfo: userinfo, host: final_s.clone(), port: port }
         }
     } 
 }
@@ -161,50 +165,56 @@ impl Authority {
 //
 //      pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
 
-#[derive(Debug)]
-struct Path {
-    path: String,
-}
+#[derive(Debug, PartialEq)]
+pub struct Path (String);
 
 impl Path {
     pub fn new(s: &String) -> Self {
         if s.is_empty() {
-            Path { path: String::new() }
+            Path(String::new())
         } else {
-            Path { path: s.clone() }
+            Path(s.clone())
         }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
     }
 }
 
 // query       = *( pchar / "/" / "?" )
-#[derive(Default, Debug)]
-struct Query {
-    query: String,
-}
+#[derive(Debug, PartialEq)]
+pub struct Query (String);
 
 impl Query {
     pub fn new(s: &String) -> Self {
         if s.is_empty() {
-            Query { query: String::new() }
+            Query(String::new())
         } else {
-            Query { query: s.clone() }
+            Query(s.clone())
         }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
     }
 }
 
 // fragment    = *( pchar / "/" / "?" )
-#[derive(Default, Debug)]
-struct Fragment {
-    fragment: String,
-}
+#[derive(Debug, PartialEq)]
+pub struct Fragment (String);
 
 impl Fragment {
     pub fn new(s: &String) -> Self {
         if s.is_empty() {
-            Fragment { fragment: String::new() }
+            Fragment(String::new())
         } else {
-            Fragment { fragment: s.clone() }
+            Fragment(s.clone())
         }
+    }
+
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
     }
 }
 
@@ -228,7 +238,7 @@ impl URI {
         let cap = URI_REGEX.captures(s);
 
         let schemestring = urimatch!(s, "scheme", &cap);
-        let authstring = urimatch!(s, "authorization", &cap);
+        let authstring = urimatch!(s, "authority", &cap);
         let pathstring = urimatch!(s, "path", &cap);
         let querystring = urimatch!(s, "query", &cap);
         let fragmentstring = urimatch!(s, "fragment", &cap);        
@@ -253,13 +263,14 @@ impl Display for URI {
 \tPath: {}\n
 \tQuery: {}\n
 \tFragment: {}\n",
-            self.scheme.scheme,
+            self.scheme.0,
             self.authority.userinfo,
             self.authority.host,
             self.authority.port.to_string(),
-            self.path.path,
-            self.query.query,
-            self.fragment.fragment,
+            self.path.0,
+            self.query.0,
+            self.fragment.0,
         }
     }
 }
+

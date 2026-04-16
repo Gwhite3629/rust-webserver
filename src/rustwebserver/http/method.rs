@@ -31,7 +31,7 @@ impl HttpMethod {
         }
     }
 
-    pub fn to_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             HttpMethod::GET => "GET",
             HttpMethod::HEAD => "HEAD",
