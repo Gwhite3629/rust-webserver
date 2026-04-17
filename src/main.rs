@@ -39,50 +39,52 @@ fn handle_connection(mut stream: TcpStream) {
         .take_while(|line| !line.is_empty())
         .collect();
 
-    let request: HttpRequest = HttpRequest::new(http_request.clone());
-
     //let request_line = buf_reader.lines().next().unwrap().unwrap();
 
     println!("Request: {http_request:#?}");
 
-    println!("Processed Request:\n{request}");
+    if !http_request.is_empty() {
 
-    let len = match request.headers.get("Content-length") {
-        Some(res) => res.parse::<usize>().unwrap(),
-        None => 0,
-    };
+        let request: HttpRequest = HttpRequest::new(http_request.clone());
 
-    let mut content: Vec<u8> = vec![0; len];
+        println!("Processed Request:\n{request}");
 
-    buf_reader
-        .read_exact(&mut content).expect("read failed");
+        let len = match request.headers.get("Content-length") {
+            Some(res) => res.parse::<usize>().unwrap(),
+            None => 0,
+        };
 
-    let http_string: String = String::from_utf8(content).unwrap();
+        let mut content: Vec<u8> = vec![0; len];
 
-    println!("Content: {:#?}", http_string);
+        buf_reader
+            .read_exact(&mut content).expect("read failed");
 
-    let (status_line, filename) = match http_request[0].as_str() {
-        "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
-        "GET /sleep HTTP/1.1" => {
-            thread::sleep(Duration::from_secs(5));
-            ("HTTP/1.1 200 OK", "hello.html")
-        }
-        _ => ("HTTP/1.1 404 NOT FOUND", "404.html")
-    };
+        let http_string: String = String::from_utf8(content).unwrap();
 
-    let contents = match fs::read_to_string(filename) {
-        Ok(contents) => contents,
-        Err(error) => panic!("Error reading file: {error:?}"),
-    };
-    let length = contents.len();
+        println!("Content: {:#?}", http_string);
 
-    let response = format!(
-        "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
-    );
+        let (status_line, filename) = match http_request[0].as_str() {
+            "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
+            "GET /sleep HTTP/1.1" => {
+                thread::sleep(Duration::from_secs(5));
+                ("HTTP/1.1 200 OK", "hello.html")
+            }
+            _ => ("HTTP/1.1 404 NOT FOUND", "404.html")
+        };
 
-    match stream.write_all(response.as_bytes()) {
-        Ok(result) => result,
-        Err(error) => panic!("Could not write response: {error:?}"),
-    };
+        let contents = match fs::read_to_string(filename) {
+            Ok(contents) => contents,
+            Err(error) => panic!("Error reading file: {error:?}"),
+        };
+        let length = contents.len();
 
+        let response = format!(
+            "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
+        );
+
+        match stream.write_all(response.as_bytes()) {
+            Ok(result) => result,
+            Err(error) => panic!("Could not write response: {error:?}"),
+        };
+    }
 }
