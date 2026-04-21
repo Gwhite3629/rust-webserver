@@ -1,4 +1,4 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum HttpStatus {
     // 1xx Informational response
     Continue = 100,

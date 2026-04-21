@@ -1,5 +1,7 @@
 mod thread;
 mod request;
+mod response;
+mod handler;
 
 mod http;
 
@@ -11,3 +13,5 @@ pub use http::URI;
 pub use thread::ThreadPool;
 
 pub use request::HttpRequest;
+pub use response::HttpResponse;
+pub use handler::HttpMethodHandlerTable;
