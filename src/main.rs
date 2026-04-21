@@ -6,7 +6,9 @@ use std::{
     time::Duration,
 };
 
-use rustwebserver::ThreadPool;
+use lazy_static::lazy_static;
+
+use rustwebserver::{HttpMethodHandlerTable, ThreadPool};
 
 use rustwebserver::HttpRequest;
 
@@ -17,19 +19,24 @@ fn main() {
     };
     let pool = ThreadPool::new(4);
 
+    let mut handlers = HttpMethodHandlerTable::new();
+    handlers.use_defaults();
+
     for stream in listener.incoming() {
         let _stream = match stream {
             Ok(_stream) => _stream,
             Err(error) => panic!("Error receiving packet from listener: {error:?}"),
         };
 
-        pool.execute(|| {
-            handle_connection(_stream);
+        let thread_handlers = handlers.clone();
+
+        pool.execute(move || {
+            handle_connection(_stream, &thread_handlers);
         });
     }
 }
 
-fn handle_connection(mut stream: TcpStream) {
+fn handle_connection(mut stream: TcpStream, handlers: &HttpMethodHandlerTable) {
     let mut buf_reader = BufReader::new(&stream);
 
     let http_request: Vec<_> = buf_reader
@@ -43,48 +50,52 @@ fn handle_connection(mut stream: TcpStream) {
 
     println!("Request: {http_request:#?}");
 
-    if !http_request.is_empty() {
-
-        let request: HttpRequest = HttpRequest::new(http_request.clone());
-
-        println!("Processed Request:\n{request}");
-
-        let len = match request.headers.get("Content-length") {
-            Some(res) => res.parse::<usize>().unwrap(),
-            None => 0,
-        };
-
-        let mut content: Vec<u8> = vec![0; len];
-
-        buf_reader
-            .read_exact(&mut content).expect("read failed");
-
-        let http_string: String = String::from_utf8(content).unwrap();
-
-        println!("Content: {:#?}", http_string);
-
-        let (status_line, filename) = match http_request[0].as_str() {
-            "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
-            "GET /sleep HTTP/1.1" => {
-                thread::sleep(Duration::from_secs(5));
-                ("HTTP/1.1 200 OK", "hello.html")
-            }
-            _ => ("HTTP/1.1 404 NOT FOUND", "404.html")
-        };
-
-        let contents = match fs::read_to_string(filename) {
-            Ok(contents) => contents,
-            Err(error) => panic!("Error reading file: {error:?}"),
-        };
-        let length = contents.len();
-
-        let response = format!(
-            "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
-        );
-
-        match stream.write_all(response.as_bytes()) {
-            Ok(result) => result,
-            Err(error) => panic!("Could not write response: {error:?}"),
-        };
+    if http_request.is_empty() {
+        return;
     }
+
+    let request: HttpRequest = HttpRequest::new(http_request.clone());
+
+    println!("Processed Request:\n{request}");
+
+    let len = match request.headers.get("Content-length") {
+        Some(res) => res.parse::<usize>().unwrap(),
+        None => 0,
+    };
+
+    let mut content: Vec<u8> = vec![0; len];
+
+    buf_reader
+        .read_exact(&mut content).expect("read failed");
+
+    let http_string: String = String::from_utf8(content).unwrap();
+
+    println!("Content: {:#?}", http_string);
+
+    let response = handlers.get(request.method).unwrap()(request);
+/*
+    let (status_line, filename) = match http_request[0].as_str() {
+        "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),
+        "GET /sleep HTTP/1.1" => {
+            thread::sleep(Duration::from_secs(5));
+            ("HTTP/1.1 200 OK", "hello.html")
+        }
+        _ => ("HTTP/1.1 404 NOT FOUND", "404.html")
+    };
+
+    let contents = match fs::read_to_string(filename) {
+        Ok(contents) => contents,
+        Err(error) => panic!("Error reading file: {error:?}"),
+    };
+    let length = contents.len();
+
+    let response = format!(
+        "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
+    );
+
+    match stream.write_all(response.as_bytes()) {
+        Ok(result) => result,
+        Err(error) => panic!("Could not write response: {error:?}"),
+    };
+*/
 }

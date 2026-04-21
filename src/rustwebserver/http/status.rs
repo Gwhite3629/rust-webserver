@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub enum HttpStatus {
     // 1xx Informational response
     Continue = 100,
@@ -7,6 +7,7 @@ pub enum HttpStatus {
     EarlyHints = 103,
 
     // 2xx Success
+    #[default]
     OK = 200,
     Created = 201,
     Accepted = 202,

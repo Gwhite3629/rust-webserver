@@ -19,7 +19,7 @@ lazy_static! {
 //                  / path-rootless
 //                  / path-empty
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct URI {
     pub scheme: Scheme,
     pub authority: Authority,
@@ -29,7 +29,7 @@ pub struct URI {
 }
 
 // scheme      = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) (RFC 3986)
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Scheme (String);
 
 impl Scheme {
@@ -51,7 +51,7 @@ impl Scheme {
 // host        = IP-literal / IPv4address / reg-name 
 // port        = *DIGIT
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Authority {
     pub userinfo: String,
     pub host: String,
@@ -165,7 +165,7 @@ impl Authority {
 //
 //      pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Path (String);
 
 impl Path {
@@ -183,7 +183,7 @@ impl Path {
 }
 
 // query       = *( pchar / "/" / "?" )
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Query (String);
 
 impl Query {
@@ -201,7 +201,7 @@ impl Query {
 }
 
 // fragment    = *( pchar / "/" / "?" )
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Fragment (String);
 
 impl Fragment {

@@ -2,6 +2,8 @@ mod thread;
 mod request;
 mod response;
 mod handler;
+mod defaultmethods;
+mod config;
 
 mod http;
 

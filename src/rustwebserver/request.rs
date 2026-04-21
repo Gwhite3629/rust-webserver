@@ -6,7 +6,7 @@ use crate::HttpFields;
 use crate::HttpMethod;
 use crate::URI;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HttpRequest {
     pub method: HttpMethod,
     pub target: URI,
@@ -20,7 +20,7 @@ impl HttpRequest {
         let form_s = Self::format_scheme(request[0].clone());
         //let form_h = Self::format_host(request[1].clone());
         return HttpRequest { 
-            method: HttpMethod::from_str(&form_s[0]),
+            method: HttpMethod::from_str(&form_s[0]).unwrap(),
             target: URI::new(&form_s[1]),
             version: form_s[2].clone(),
             headers: HttpFields::populate(request),
