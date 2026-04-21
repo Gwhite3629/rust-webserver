@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use lazy_static::__Deref;
 
 use crate::HttpRequest;
 use crate::HttpResponse;

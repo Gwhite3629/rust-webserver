@@ -17,3 +17,5 @@ pub use thread::ThreadPool;
 pub use request::HttpRequest;
 pub use response::HttpResponse;
 pub use handler::HttpMethodHandlerTable;
+pub use config::HttpConfig;
+pub use config::CONFIG;

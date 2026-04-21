@@ -1,19 +1,28 @@
 use std::{
-    fs,
     io::{BufReader, prelude::*},
     net::{TcpListener, TcpStream},
-    thread,
-    time::Duration,
 };
 
-use lazy_static::lazy_static;
-
-use rustwebserver::{HttpMethodHandlerTable, ThreadPool};
-
-use rustwebserver::HttpRequest;
+use rustwebserver::{
+    HttpConfig,
+    HttpRequest,
+    HttpResponse,
+    HttpMethodHandlerTable,
+    ThreadPool,
+    CONFIG,
+};
 
 fn main() {
-    let listener = match TcpListener::bind("127.0.0.1:7878") {
+
+    let args: Vec<String> = std::env::args().collect::<Vec<String>>();
+    if args.len() == 1 {
+        println!("usage: {} <config>", args[0]);
+        return;
+    }
+
+    CONFIG.set(HttpConfig::new(args)).unwrap();
+
+    let listener = match TcpListener::bind((CONFIG.get().unwrap().host, CONFIG.get().unwrap().port)) {
         Ok(listener) => listener,
         Err(error) => panic!("Problem binding TcpListener: {error:?}"),
     };
@@ -72,7 +81,7 @@ fn handle_connection(mut stream: TcpStream, handlers: &HttpMethodHandlerTable) {
 
     println!("Content: {:#?}", http_string);
 
-    let response = handlers.get(request.method).unwrap()(request);
+    let response: HttpResponse = handlers.get(request.method).unwrap()(request);
 /*
     let (status_line, filename) = match http_request[0].as_str() {
         "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),

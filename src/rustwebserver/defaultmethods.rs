@@ -1,6 +1,10 @@
+use std::fs::File;
+use std::io::{BufReader, Read};
 
-use crate::HttpRequest;
+use crate::{HttpRequest, HttpStatus, HttpFields};
 use crate::HttpResponse;
+
+use crate::config::CONFIG;
 
 /*
     let (status_line, filename) = match http_request[0].as_str() {
@@ -24,21 +28,51 @@ use crate::HttpResponse;
 */
 
 pub fn handle_get(req: HttpRequest) -> HttpResponse {
-    let res = HttpResponse::new();
 
+    let mut currentstatus: HttpStatus;
 
+    let mut contents = Vec::<u8>::new();
 
-    return res;
+    let mut flag = true;
+
+    let mut f = File::open(CONFIG.get().unwrap().path.clone() + req.target.path.as_str());
+
+    if f.as_ref().is_ok() {
+        currentstatus = HttpStatus::OK;
+    } else {
+        currentstatus = HttpStatus::NotFound;
+        f = File::open(CONFIG.get().unwrap().path.clone() + "404.html");
+        if !f.as_ref().is_ok() {
+            flag = false;
+        }
+    };
+
+    if flag {
+        let mut buf_reader: BufReader<File> = BufReader::new(f.ok().unwrap());
+        match buf_reader.read_to_end(&mut contents) {
+            Ok(_) => (),
+            Err(_) => currentstatus = HttpStatus::NoContent,
+        }
+    } else {
+        currentstatus = HttpStatus::BadRequest;
+    }
+
+    HttpResponse {
+        version: req.version.clone(),
+        status: currentstatus,
+        headers: HttpFields::new(),
+        content: contents,
+    }
 }
 
-pub fn handle_head(req: HttpRequest) -> HttpResponse {
+pub fn handle_head(_req: HttpRequest) -> HttpResponse {
     HttpResponse::new()
 }
 
-pub fn handle_options(req: HttpRequest) -> HttpResponse {
+pub fn handle_options(_req: HttpRequest) -> HttpResponse {
     HttpResponse::new()
 }
 
-pub fn handle_trace(req: HttpRequest) -> HttpResponse {
+pub fn handle_trace(_req: HttpRequest) -> HttpResponse {
     HttpResponse::new()
 }
