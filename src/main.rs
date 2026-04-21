@@ -92,10 +92,10 @@ fn handle_connection(mut stream: TcpStream, handlers: &HttpMethodHandlerTable) {
     let response = format!(
         "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}"
     );
-
-    match stream.write_all(response.as_bytes()) {
+*/
+    match stream.write_all(response.to_string().as_bytes()) {
         Ok(result) => result,
         Err(error) => panic!("Could not write response: {error:?}"),
     };
-*/
+
 }
