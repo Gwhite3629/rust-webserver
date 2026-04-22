@@ -1,6 +1,9 @@
 use std::fs::File;
 use std::path::Path;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
+
+use flate2::write::GzEncoder;
+use flate2::Compression;
 
 use crate::file::is_valid_path;
 use crate::{HttpRequest, HttpStatus, HttpFields};
@@ -33,43 +36,55 @@ pub fn handle_get(req: HttpRequest) -> HttpResponse {
 
     let mut currentstatus: HttpStatus;
 
+    let mut file_contents = Vec::<u8>::new();
+
     let mut contents = Vec::<u8>::new();
 
-    let mut flag = true;
+    let req_path = Path::new(req.target.path.as_str());
 
-    let req_path = req.target.path.as_str();
+    let base = Path::new(&CONFIG.get().unwrap().path);
 
-    if !is_valid_path(&Path::new(req_path)) {
-        currentstatus = HttpStatus::BadRequest;
+    let path = Path::new(base);
+
+    let final_path: String;
+
+    let headers: HttpFields;
+
+    if is_valid_path(&req_path) {
+        currentstatus = HttpStatus::OK;
+        final_path = path.join(&req_path.strip_prefix("/").unwrap()).to_str().unwrap().to_string();
     } else {
+        currentstatus = HttpStatus::NotFound;
+        final_path = path.join("404.html").to_str().unwrap().to_string();
+    }
+    
+    let f = File::open(&final_path);
 
-        let mut f = File::open(CONFIG.get().unwrap().path.clone() + req_path);
+    if f.as_ref().is_ok() {
+        let mut buf_reader: BufReader<File> = BufReader::new(f.ok().unwrap());
+        match buf_reader.read_to_end(&mut file_contents) {
+            Ok(_) => {
 
-        if f.as_ref().is_ok() {
-            currentstatus = HttpStatus::OK;
-        } else {
-            currentstatus = HttpStatus::NotFound;
-            f = File::open(CONFIG.get().unwrap().path.clone() + "404.html");
-            if !f.as_ref().is_ok() {
-                flag = false;
-            }
-        };
+                let mut gzip_writer = GzEncoder::new(&mut contents, Compression::default());
 
-        if flag {
-            let mut buf_reader: BufReader<File> = BufReader::new(f.ok().unwrap());
-            match buf_reader.read_to_end(&mut contents) {
-                Ok(_) => (),
-                Err(_) => currentstatus = HttpStatus::InternalServerError,
-            }
-        } else {
-            currentstatus = HttpStatus::BadRequest;
+                match gzip_writer.write(&file_contents) {
+                    Ok(result) => headers = HttpResponse::generate_headers(final_path, result),
+                    Err(error) => panic!("Could not write response content: {error:?}"),
+                }
+            },
+            Err(_) => {
+                headers = HttpFields::new();
+                currentstatus = HttpStatus::InternalServerError},
         }
+    } else {
+        currentstatus = HttpStatus::BadRequest;
+        headers = HttpFields::new();
     }
 
     HttpResponse {
         version: req.version.clone(),
         status: currentstatus,
-        headers: HttpFields::new(),
+        headers: headers,
         content: contents,
     }
 }

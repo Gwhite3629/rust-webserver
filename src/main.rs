@@ -104,7 +104,27 @@ fn handle_connection(mut stream: TcpStream, handlers: &HttpMethodHandlerTable) {
 */
     match stream.write_all(response.to_string().as_bytes()) {
         Ok(result) => result,
-        Err(error) => panic!("Could not write response: {error:?}"),
+        Err(error) => panic!("Could not write response headers: {error:?}"),
     };
+
+    for chunk in response.content.chunks(100) {
+        let mut wr = Vec::<u8>::new();
+        wr.append(&mut chunk.len().to_le_bytes().to_vec());
+        wr.append(&mut "\r\n".as_bytes().to_vec());
+        wr.append(&mut chunk.to_vec());
+        wr.append(&mut "\r\n".as_bytes().to_vec());
+        match stream.write(&wr) {
+            Ok(_) => (),
+            Err(error) => panic!("Could not write response headers: {error:?}"),
+        }
+    }
+
+    let mut wr = Vec::<u8>::new();
+    wr.append(&mut "0\r\n".as_bytes().to_vec());
+    wr.append(&mut "\r\n".as_bytes().to_vec());
+    match stream.write(&wr) {
+        Ok(_) => (),
+        Err(error) => panic!("Could not write response headers: {error:?}"),
+    }
 
 }

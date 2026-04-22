@@ -1,6 +1,8 @@
+//use std::fs::metadata;
 
 use crate::HttpFields;
 use crate::HttpStatus;
+use crate::file::get_mimetype;
 
 #[derive(Debug, Default)]
 pub struct HttpResponse {
@@ -22,9 +24,21 @@ impl HttpResponse {
             headers = headers + &k + ": " + v.as_str() + "\r\n";
         }
         headers = headers + "\r\n\r\n";
-        let content: String = String::from_utf8(self.content.clone()).unwrap();
 
-        let response: String = status + headers.as_str() + content.as_str();
+        let response: String = status + headers.as_str();
         response
+    }
+
+    pub fn generate_headers(file: String, len: usize) -> HttpFields {
+        let mut res = HttpFields::new();
+
+        //let metadata = metadata(&file).unwrap();
+
+        res.insert("content-length", len.to_string().as_str());
+        res.insert("content-type", get_mimetype(file).as_str());
+        res.insert("content-encoding", "gzip");
+        res.insert("transfer-encoding", "chunked");
+
+        res
     }
 }
