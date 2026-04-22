@@ -1,6 +1,8 @@
 use std::fs::File;
+use std::path::Path;
 use std::io::{BufReader, Read};
 
+use crate::file::is_valid_path;
 use crate::{HttpRequest, HttpStatus, HttpFields};
 use crate::HttpResponse;
 
@@ -35,26 +37,33 @@ pub fn handle_get(req: HttpRequest) -> HttpResponse {
 
     let mut flag = true;
 
-    let mut f = File::open(CONFIG.get().unwrap().path.clone() + req.target.path.as_str());
+    let req_path = req.target.path.as_str();
 
-    if f.as_ref().is_ok() {
-        currentstatus = HttpStatus::OK;
-    } else {
-        currentstatus = HttpStatus::NotFound;
-        f = File::open(CONFIG.get().unwrap().path.clone() + "404.html");
-        if !f.as_ref().is_ok() {
-            flag = false;
-        }
-    };
-
-    if flag {
-        let mut buf_reader: BufReader<File> = BufReader::new(f.ok().unwrap());
-        match buf_reader.read_to_end(&mut contents) {
-            Ok(_) => (),
-            Err(_) => currentstatus = HttpStatus::NoContent,
-        }
-    } else {
+    if !is_valid_path(&Path::new(req_path)) {
         currentstatus = HttpStatus::BadRequest;
+    } else {
+
+        let mut f = File::open(CONFIG.get().unwrap().path.clone() + req_path);
+
+        if f.as_ref().is_ok() {
+            currentstatus = HttpStatus::OK;
+        } else {
+            currentstatus = HttpStatus::NotFound;
+            f = File::open(CONFIG.get().unwrap().path.clone() + "404.html");
+            if !f.as_ref().is_ok() {
+                flag = false;
+            }
+        };
+
+        if flag {
+            let mut buf_reader: BufReader<File> = BufReader::new(f.ok().unwrap());
+            match buf_reader.read_to_end(&mut contents) {
+                Ok(_) => (),
+                Err(_) => currentstatus = HttpStatus::InternalServerError,
+            }
+        } else {
+            currentstatus = HttpStatus::BadRequest;
+        }
     }
 
     HttpResponse {

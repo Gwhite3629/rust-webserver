@@ -4,6 +4,7 @@ mod response;
 mod handler;
 mod defaultmethods;
 mod config;
+mod file;
 
 mod http;
 
