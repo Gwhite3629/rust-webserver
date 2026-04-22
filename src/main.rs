@@ -109,7 +109,7 @@ fn handle_connection(mut stream: TcpStream, handlers: &HttpMethodHandlerTable) {
 
     for chunk in response.content.chunks(100) {
         let mut wr = Vec::<u8>::new();
-        wr.append(&mut chunk.len().to_le_bytes().to_vec());
+        wr.append(&mut format!("{:x}", chunk.len()).to_ascii_lowercase().as_bytes().to_vec());
         wr.append(&mut "\r\n".as_bytes().to_vec());
         wr.append(&mut chunk.to_vec());
         wr.append(&mut "\r\n".as_bytes().to_vec());
