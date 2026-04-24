@@ -160,19 +160,21 @@ pub fn handle_trace(req: HttpRequest) -> HttpResponse {
 
     let headers: HttpFields;
 
-    let mut gzip_writer = GzEncoder::new(&mut contents, Compression::default());
+    {
+        let mut gzip_writer = GzEncoder::new(&mut contents, Compression::default());
 
-    match gzip_writer.write(&file_contents) {
-        Ok(result) => {
-            headers = HttpResponse::generate_trace_headers(result);
-            currentstatus = HttpStatus::OK},
-        Err(error) => panic!("Could not write response content: {error:?}"),
+        match gzip_writer.write(&file_contents) {
+            Ok(result) => {
+                headers = HttpResponse::generate_trace_headers(result);
+                currentstatus = HttpStatus::OK},
+            Err(error) => panic!("Could not write response content: {error:?}"),
+        }
     }
 
     HttpResponse {
         version: req.version.clone(),
         status: currentstatus,
         headers: headers,
-        content: Vec::new(),
+        content: contents,
     }
 }
