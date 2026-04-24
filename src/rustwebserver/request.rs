@@ -219,11 +219,11 @@ fn improper_uri() {
 
     assert_eq!(http_request.method.as_str(),"POST");
 
-    assert_eq!(http_request.target.scheme.as_str(),"");
+    assert_eq!(http_request.target.scheme.as_str(),"www.example.com");
     assert_eq!(http_request.target.authority.userinfo.as_str(),"");
-    assert_eq!(http_request.target.authority.host.as_str(),"www.example.com");
-    assert_eq!(http_request.target.authority.port,6969);
-    assert_eq!(http_request.target.path.as_str(),"/foo");
+    assert_eq!(http_request.target.authority.host.as_str(),"");
+    assert_eq!(http_request.target.authority.port,0);
+    assert_eq!(http_request.target.path.as_str(),"6969/foo");
     assert_eq!(http_request.target.query.as_str(),"key=value");
     assert_eq!(http_request.target.fragment.as_str(),"frag");
 

@@ -4,7 +4,7 @@ use lazy_static::lazy_static;
 
 lazy_static! {
         static ref URI_REGEX: Regex = Regex::new(
-            r"^((?<scheme>[^:/?#]+)://)?((?<authority>[^/?#]*))?(?<path>[^?#]*)(\?(?<query>[^#]*))?(#(?<fragment>.*))?$"
+            r"^((?<scheme>[^:/?#]+):)?(//(?<authority>[^/?#]*))?(?<path>[^?#]*)(\?(?<query>[^#]*))?(#(?<fragment>.*))?$"
         ).unwrap();
     } 
 
