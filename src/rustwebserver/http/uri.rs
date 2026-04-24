@@ -234,21 +234,53 @@ macro_rules! urimatch {
 
 impl URI {
     pub fn new(s: &String) -> Self {
-        let cap = URI_REGEX.captures(s);
-
-        let schemestring = urimatch!(s, "scheme", &cap);
-        let authstring = urimatch!(s, "authority", &cap);
-        let pathstring = urimatch!(s, "path", &cap);
-        let querystring = urimatch!(s, "query", &cap);
-        let fragmentstring = urimatch!(s, "fragment", &cap);        
+        let cap = URI_REGEX.captures(s);      
 
         return URI { 
-            scheme: Scheme::new(&schemestring),
-            authority: Authority::new(&authstring),
-            path: Path::new(&pathstring),
-            query: Query::new(&querystring),
-            fragment: Fragment::new(&fragmentstring),
+            scheme: Scheme::new(&urimatch!(s, "scheme", &cap)),
+            authority: Authority::new(&urimatch!(s, "authority", &cap)),
+            path: Path::new(&urimatch!(s, "path", &cap)),
+            query: Query::new(&urimatch!(s, "query", &cap)),
+            fragment: Fragment::new(&urimatch!(s, "fragment", &cap)),
         }
+    }
+
+    pub fn to_string(&self) -> String {
+        let scheme: String =
+            if self.scheme.0.is_empty() {
+                "".to_string()
+            } else {
+                self.scheme.0.clone() + "://"
+            };
+            
+        let authority: String = 
+            if self.authority.userinfo.is_empty() {
+                "".to_string()
+            } else {
+                self.authority.userinfo.clone() + "@"
+            } + 
+            if self.authority.host.is_empty() {
+                ""
+            } else {
+                self.authority.host.as_str()
+            };
+        let port: String = 
+            if self.authority.port == 0 {
+                "".to_string()
+            } else {
+                ":".to_string() + self.authority.port.to_string().as_str()
+            };
+        let path: String = self.path.0.clone();
+        let query: String = 
+            if self.query.0.is_empty() {
+                "".to_string()
+            } else {
+                "?".to_string() + self.query.0.as_str()
+            };
+
+        let ret: String = format!("{}{}{}{}{}",scheme,authority,port,path,query);
+
+        ret
     }
 }
 

@@ -56,6 +56,21 @@ impl HttpRequest {
     fn _insert_content(&mut self, v: Vec<u8>) {
         self.content = v;
     }
+
+    pub fn to_string(&self) -> String {
+        let status: String = String::new() + 
+            self.method.as_str() + " " + 
+            self.target.to_string().as_str() + " " + 
+            self.version.as_str() + "\r\n";
+        let mut headers: String = String::new();
+        for (k, v) in self.headers.clone() {
+            headers = headers + &k + ": " + v.as_str() + "\r\n";
+        }
+        headers = headers + "\r\n\r\n";
+
+        let response: String = status + headers.as_str();
+        response
+    }
 }
 
 impl Display for HttpRequest {

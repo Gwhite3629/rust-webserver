@@ -29,13 +29,25 @@ impl HttpResponse {
         response
     }
 
-    pub fn generate_headers(file: String, len: usize) -> HttpFields {
+    pub fn generate_get_headers(file: String, len: usize) -> HttpFields {
         let mut res = HttpFields::new();
 
         //let metadata = metadata(&file).unwrap();
 
         res.insert("content-length", len.to_string().as_str());
         res.insert("content-type", get_mimetype(file).as_str());
+        res.insert("content-encoding", "gzip");
+        res.insert("transfer-encoding", "chunked");
+
+        res
+    }
+
+    pub fn generate_trace_headers(len: usize) -> HttpFields {
+        let mut res = HttpFields::new();
+
+        //let metadata = metadata(&file).unwrap();
+
+        res.insert("content-length", len.to_string().as_str());
         res.insert("content-encoding", "gzip");
         res.insert("transfer-encoding", "chunked");
 
