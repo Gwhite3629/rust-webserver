@@ -9,6 +9,7 @@ mod file;
 mod http;
 
 pub use http::HttpFields;
+pub use http::CaseInsensitiveString;
 pub use http::HttpMethod;
 pub use http::HttpStatus;
 pub use http::URI;
