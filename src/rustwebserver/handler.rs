@@ -24,28 +24,12 @@ pub union RequestState<'req> {
     pub path: &'req String,
     pub contents: &'req mut Vec<u8>,
 }
-/*
-pub trait Writer {
-    fn writer(&self, buf: &[u8]) -> io::Result<usize>;
-}
-
-#[derive(Clone)]
-pub enum WriterNames {
-    GZ,
-    BF,
-}
-
-pub union WriterTypes<'req> {
-    pub gz: &'req GzEncoder<&'req mut [u8]>,
-    pub bf: &'req BufWriter<&'req mut [u8]>,
-}
-*/
 
 /*
 pub struct RequestEffect {
     pub writer: Box<dyn FnMut(&[u8]) -> io::Result<usize>>,
 }
-    */
+*/
 
 type HttpMethodHandler = dyn Fn(HttpRequest) -> HttpResponse + Sync + Send;
 
@@ -106,12 +90,6 @@ impl HttpFieldHandlerTable {
         ).map(|v|&**v)
     }
 
-    /*
-    DefaultFields::ACCEPT => CaseInsensitiveString("accept".to_string()),
-    DefaultFields::ACCEPTENCODING => CaseInsensitiveString("accept-encoding".to_string()),
-    DefaultFields::CONNECTION=> CaseInsensitiveString("connection".to_string()),
-    DefaultFields::CONTENTLENGTH => CaseInsensitiveString("content-length".to_string()),
-    */
     pub fn use_defaults(&mut self) {
         self.insert(CaseInsensitiveString::from_str("accept"), &default_accept);
         self.insert(CaseInsensitiveString::from_str("accept-encoding"), &default_accept_encoding);

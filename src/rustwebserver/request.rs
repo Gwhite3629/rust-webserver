@@ -86,6 +86,8 @@ impl Display for HttpRequest {
     }
 }
 
+// TESTS
+
 lazy_static! {
     static ref RAW_BASIC_REQUEST: String = String::from("GET / HTTP/1.1\r\nHost: 127.0.0.1:7878\r\n\r\n");
 }

@@ -9,6 +9,8 @@ mod file;
 
 mod http;
 
+mod core;
+
 pub use http::HttpFields;
 pub use http::CaseInsensitiveString;
 pub use http::HttpMethod;
@@ -18,6 +20,7 @@ pub use http::URI;
 pub use defaultfields::DefaultFields;
 
 pub use thread::ThreadPool;
+pub use core::handle_connection;
 
 pub use request::HttpRequest;
 pub use response::HttpResponse;
