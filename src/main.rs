@@ -1,4 +1,11 @@
 use std::net::TcpListener;
+use std::sync::Arc;
+
+use native_tls::{
+    Identity,
+    TlsAcceptor,
+    TlsStream,
+};
 
 use rustwebserver::{
     HttpConfig,
@@ -25,6 +32,14 @@ fn main() {
         Ok(listener) => listener,
         Err(error) => panic!("Problem binding TcpListener: {error:?}"),
     };
+
+    let acceptor = match TlsAcceptor::new(CONFIG.get().unwrap().identity.clone()) {
+        Ok(acceptor) => acceptor,
+        Err(error) => panic!("Problem reading identity file: {error:?}"),
+    };
+    let acceptor = Arc::new(acceptor);
+
+
     let pool = ThreadPool::new(4);
 
     let mut method_handlers = HttpMethodHandlerTable::new();
@@ -38,8 +53,11 @@ fn main() {
 
         let thread_method_handlers = method_handlers.clone();
 
+        let acceptor = acceptor.clone();
+
         pool.execute(move || {
-            handle_connection(_stream, &thread_method_handlers);
+            let stream = acceptor.accept(_stream).unwrap();
+            handle_connection(stream, &thread_method_handlers);
         });
     }
 }

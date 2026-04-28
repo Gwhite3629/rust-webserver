@@ -1,8 +1,10 @@
 use std::fs::File;
-use std::io::{BufReader, BufRead};
+use std::io::{BufReader, BufRead, Read};
 use std::net::IpAddr;
 use std::collections::HashMap;
 use std::sync::OnceLock;
+
+use native_tls::Identity;
 
 use crate::HttpFieldHandlerTable;
 
@@ -14,6 +16,7 @@ pub struct HttpConfig {
     pub port: u16,
     pub host: IpAddr,
     pub field_handlers: HttpFieldHandlerTable,
+    pub identity: Identity,
 }
 
 impl HttpConfig {
@@ -24,7 +27,19 @@ impl HttpConfig {
             port: params.get("Port").unwrap().parse::<u16>().unwrap(), 
             host: params.get("Host").unwrap().parse::<IpAddr>().unwrap(),
             field_handlers: HttpConfig::populate_fields(),
+            identity: HttpConfig::parse_cert(params.get("Identity").unwrap().to_string()),
         }
+    }
+
+    pub fn parse_cert(fname: String) -> Identity {
+        let mut file = File::open(fname).unwrap();
+        let mut identity = vec![];
+        file.read_to_end(&mut identity).unwrap();
+        let identity = match Identity::from_pkcs12(&identity, "default") {
+            Ok(identity) => identity,
+            Err(error) => panic!("Error reading identity file {error:?}"),
+        };
+        identity
     }
 
     pub fn parse(args: Vec<String>) -> HashMap<String,String> {

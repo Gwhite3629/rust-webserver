@@ -1,7 +1,9 @@
 use std::{
     io::{BufReader, prelude::*},
-    net::{ TcpStream},
+    net::{TcpStream},
 };
+
+use native_tls::TlsStream;
 
 use crate::{
     HttpRequest,
@@ -11,8 +13,8 @@ use crate::{
 
 const MB: usize = 1000000;
 
-pub fn handle_connection(mut stream: TcpStream, method_handlers: &HttpMethodHandlerTable) {
-    let mut buf_reader = BufReader::new(&stream);
+pub fn handle_connection(mut stream: TlsStream<TcpStream>, method_handlers: &HttpMethodHandlerTable) {
+    let mut buf_reader = BufReader::new(&mut stream);
 
     let raw_request: Vec<_> = buf_reader
         .by_ref()
@@ -44,7 +46,7 @@ pub fn handle_connection(mut stream: TcpStream, method_handlers: &HttpMethodHand
 
 }
 
-fn send_chunked(mut stream: TcpStream, response: HttpResponse) {
+fn send_chunked(mut stream: TlsStream<TcpStream>, response: HttpResponse) {
 
     // Write chunked response
     for chunk in response.content.chunks(1*MB) {

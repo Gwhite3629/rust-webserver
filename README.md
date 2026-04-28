@@ -23,6 +23,28 @@ Attempt at REST conformity, though the ability to implement custom methods does 
 
 Each request is handled by a seperate thread allowing for multiple connections and quick re-loading of resources
 
+### HTTPS
+
+Generate a key using:
+
+Code currently expects "default" as password
+
+```
+openssl req -x509 -out localhost.crt -keyout localhost.key \
+  -newkey rsa:2048 -nodes -sha256 \
+  -subj '/CN=localhost' -extensions EXT -config <( \
+   printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth")
+
+openssl pkcs12 -export -out identity.pfx \
+ -inkey localhost.key \
+ -in localhost.crt 
+
+```
+
+With this add an alias to /etc/hosts to indicate 127.0.0.1 is localhost
+Then add the crt file to the browsers certificates
+
+
 ## TODO
 
 ### Persistent / streamed connections
