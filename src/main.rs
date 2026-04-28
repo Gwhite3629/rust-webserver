@@ -20,7 +20,10 @@ fn main() {
         return;
     }
 
-    CONFIG.set(HttpConfig::new(args)).unwrap();
+    match CONFIG.set(HttpConfig::new(args)) {
+        Ok(_) => (),
+        Err(_) => panic!("Failed to setup config"),
+    }
 
     let listener = match TcpListener::bind((CONFIG.get().unwrap().host, CONFIG.get().unwrap().port)) {
         Ok(listener) => listener,
@@ -28,8 +31,8 @@ fn main() {
     };
     let pool = ThreadPool::new(4);
 
-    let mut handlers = HttpMethodHandlerTable::new();
-    handlers.use_defaults();
+    let mut method_handlers = HttpMethodHandlerTable::new();
+    method_handlers.use_defaults();
 
     for stream in listener.incoming() {
         let _stream = match stream {
@@ -37,15 +40,15 @@ fn main() {
             Err(error) => panic!("Error receiving packet from listener: {error:?}"),
         };
 
-        let thread_handlers = handlers.clone();
+        let thread_method_handlers = method_handlers.clone();
 
         pool.execute(move || {
-            handle_connection(_stream, &thread_handlers);
+            handle_connection(_stream, &thread_method_handlers);
         });
     }
 }
 
-fn handle_connection(mut stream: TcpStream, handlers: &HttpMethodHandlerTable) {
+fn handle_connection(mut stream: TcpStream, method_handlers: &HttpMethodHandlerTable) {
     let mut buf_reader = BufReader::new(&stream);
 
     let http_request: Vec<_> = buf_reader
@@ -81,7 +84,7 @@ fn handle_connection(mut stream: TcpStream, handlers: &HttpMethodHandlerTable) {
 
     println!("Content: {:#?}", http_string);
 
-    let response: HttpResponse = handlers.get(request.method).unwrap()(request);
+    let response: HttpResponse = method_handlers.get(request.method).unwrap()(request);
 /*
     let (status_line, filename) = match http_request[0].as_str() {
         "GET / HTTP/1.1" => ("HTTP/1.1 200 OK", "hello.html"),

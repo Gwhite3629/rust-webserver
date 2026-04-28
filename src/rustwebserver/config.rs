@@ -1,16 +1,21 @@
+use std::fmt::Result;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 use std::net::IpAddr;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+use crate::HttpFieldHandlerTable;
+use crate::defaultfields;
+
 pub static CONFIG: OnceLock<HttpConfig> = OnceLock::new();
 
-#[derive(Debug)]
+
 pub struct HttpConfig {
     pub path: String,
     pub port: u16,
     pub host: IpAddr,
+    pub field_handlers: HttpFieldHandlerTable,
 }
 
 impl HttpConfig {
@@ -20,6 +25,7 @@ impl HttpConfig {
             path: params.get("Path").unwrap().to_string(), 
             port: params.get("Port").unwrap().parse::<u16>().unwrap(), 
             host: params.get("Host").unwrap().parse::<IpAddr>().unwrap(),
+            field_handlers: HttpConfig::populate_fields(),
         }
     }
 
@@ -43,6 +49,12 @@ impl HttpConfig {
         }
 
         params
+    }
+
+    pub fn populate_fields() -> HttpFieldHandlerTable{
+        let mut ret = HttpFieldHandlerTable::new();
+        ret.use_defaults();
+        ret
     }
 }
 

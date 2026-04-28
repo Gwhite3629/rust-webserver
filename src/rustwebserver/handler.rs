@@ -1,11 +1,16 @@
 use std::collections::HashMap;
-use std::ops::Deref;
+use std::io::Write;
 
 use crate::HttpRequest;
 use crate::HttpResponse;
 use crate::HttpMethod;
-use crate::HttpFields;
 use crate::CaseInsensitiveString;
+use crate::defaultfields::{
+    default_accept,
+    default_accept_encoding,
+    default_connection,
+    default_content_length,
+};
 
 use crate::defaultmethods::{
     handle_get,
@@ -14,16 +19,27 @@ use crate::defaultmethods::{
     handle_trace,
 };
 
+
+pub union RequestState<'req> {
+    pub path: &'req String,
+    pub contents: &'req mut Vec<u8>,
+}
+
+pub struct RequestEffect<'req> {
+    pub writer: Box<&'req dyn Write>,
+}
+
 type HttpMethodHandler = dyn Fn(HttpRequest) -> HttpResponse + Sync + Send;
 
 // Take a single value from a header field and return a closure that updates the control flow of the current method
-type HttpFieldHandler = dyn Fn(String) -> Box<dyn FnOnce()>;
+type HttpFieldHandler = dyn Fn(String, RequestState) -> Option<RequestEffect> + Sync + Send;
 
 #[derive(Clone)]
 pub struct HttpMethodHandlerTable (
     HashMap<HttpMethod, &'static HttpMethodHandler>,
 );
 
+#[derive(Clone)]
 pub struct HttpFieldHandlerTable (
     HashMap<CaseInsensitiveString, &'static HttpFieldHandler>,
 );
@@ -66,25 +82,22 @@ impl HttpFieldHandlerTable {
         );
     }
 
-    pub fn get(&self, key: CaseInsensitiveString) -> Option<&HttpFieldHandler> {
+    pub fn get(&self, key: &CaseInsensitiveString) -> Option<&HttpFieldHandler> {
         self.0.get(
-            &key
+            key
         ).map(|v|&**v)
     }
 
-    pub fn dispatch(&self, headers: HttpFields) -> impl Iterator<Item = Box<dyn FnOnce()>> {
-        
-        let list: Vec<Box<dyn FnOnce()>> = Vec::new();
-        
-        for (key, val) in headers {
-            let fun = match self.get(key) {
-                Some(fun) => {
-                    let f = (*fun)(val);
-                },
-                None => (),
-            };
-        }
-
-        list.into_iter()
+    /*
+    DefaultFields::ACCEPT => CaseInsensitiveString("accept".to_string()),
+    DefaultFields::ACCEPTENCODING => CaseInsensitiveString("accept-encoding".to_string()),
+    DefaultFields::CONNECTION=> CaseInsensitiveString("connection".to_string()),
+    DefaultFields::CONTENTLENGTH => CaseInsensitiveString("content-length".to_string()),
+    */
+    pub fn use_defaults(&mut self) {
+        self.insert(CaseInsensitiveString::from_str("accept"), &default_accept);
+        self.insert(CaseInsensitiveString::from_str("accept-encoding"), &default_accept_encoding);
+        self.insert(CaseInsensitiveString::from_str("content"), &default_connection);
+        self.insert(CaseInsensitiveString::from_str("content-length"), &default_content_length);
     }
 }

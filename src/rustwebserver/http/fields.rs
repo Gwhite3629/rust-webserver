@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 #[derive(Clone, Debug)]
-pub struct CaseInsensitiveString(String);
+pub struct CaseInsensitiveString(pub String);
 
 impl PartialEq for CaseInsensitiveString {
     fn eq (&self, other: &Self) -> bool {
@@ -31,6 +31,12 @@ impl Deref for CaseInsensitiveString {
     type Target = str;
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl CaseInsensitiveString {
+    pub fn from_str(val: &str) -> Self {
+        CaseInsensitiveString(val.to_string())
     }
 }
 
