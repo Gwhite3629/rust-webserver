@@ -25,6 +25,5 @@ pub use handler::HttpMethodHandlerTable;
 pub use handler::HttpFieldHandler;
 pub use handler::HttpFieldHandlerTable;
 pub use handler::RequestState;
-pub use handler::RequestEffect;
 pub use config::HttpConfig;
 pub use config::CONFIG;

@@ -41,9 +41,11 @@ pub union WriterTypes<'req> {
 }
 */
 
+/*
 pub struct RequestEffect {
     pub writer: Box<dyn FnMut(&[u8]) -> io::Result<usize>>,
 }
+    */
 
 type HttpMethodHandler = dyn Fn(HttpRequest) -> HttpResponse + Sync + Send;
 
