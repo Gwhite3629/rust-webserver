@@ -1,8 +1,8 @@
-use std::fs::File;
-use std::path::Path;
+use std::io::Write;
+use std::io;
+use std::io::BufWriter;
 
 use crate::CaseInsensitiveString;
-use crate::RequestEffect;
 use crate::RequestState;
 
 use flate2::write::GzEncoder;
@@ -44,22 +44,27 @@ impl DefaultFields {
 
 // type HttpFieldHandler = dyn Fn(String, RequestState) -> RequestEffect + Sync + Send;
 
-pub fn default_accept(val: String, state: RequestState) -> Option<RequestEffect> {
-    None
+pub fn default_accept<'req>(_val: String, _state: &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> {
+    todo!()
 }
 
-pub fn default_accept_encoding(val: String, state: RequestState) -> Option<RequestEffect> {
+pub fn default_accept_encoding<'req>(val: String, state: &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> {
+    
     if val.contains("gzip") {
-        return Some(RequestEffect{writer: Box::new(GzEncoder::new(unsafe {state.contents}, Compression::default()))})
+        let mut gz = GzEncoder::new(unsafe {&mut state.contents}, Compression::default());
+        println!("Using gzip encoding");
+        return Box::new(move |f| gz.write(f));
     } else {
-        None
-    }
+        let mut bf = BufWriter::new(unsafe {&mut state.contents});
+        println!("Using identity encoding");
+        return Box::new(move |f| bf.write(f));
+    };
 }
 
-pub fn default_connection(val: String, state: RequestState) -> Option<RequestEffect> {
-    None
+pub fn default_connection<'req>(_val: String, _state: &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> {
+    todo!()
 }
 
-pub fn default_content_length(val: String, state: RequestState) -> Option<RequestEffect> {
-    None
+pub fn default_content_length<'req>(_val: String, _state: &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> {
+    todo!()
 }

@@ -22,6 +22,7 @@ pub use thread::ThreadPool;
 pub use request::HttpRequest;
 pub use response::HttpResponse;
 pub use handler::HttpMethodHandlerTable;
+pub use handler::HttpFieldHandler;
 pub use handler::HttpFieldHandlerTable;
 pub use handler::RequestState;
 pub use handler::RequestEffect;

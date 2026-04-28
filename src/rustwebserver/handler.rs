@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::Write;
+use std::io;
 
 use crate::HttpRequest;
 use crate::HttpResponse;
@@ -24,15 +24,31 @@ pub union RequestState<'req> {
     pub path: &'req String,
     pub contents: &'req mut Vec<u8>,
 }
+/*
+pub trait Writer {
+    fn writer(&self, buf: &[u8]) -> io::Result<usize>;
+}
 
-pub struct RequestEffect<'req> {
-    pub writer: Box<&'req dyn Write>,
+#[derive(Clone)]
+pub enum WriterNames {
+    GZ,
+    BF,
+}
+
+pub union WriterTypes<'req> {
+    pub gz: &'req GzEncoder<&'req mut [u8]>,
+    pub bf: &'req BufWriter<&'req mut [u8]>,
+}
+*/
+
+pub struct RequestEffect {
+    pub writer: Box<dyn FnMut(&[u8]) -> io::Result<usize>>,
 }
 
 type HttpMethodHandler = dyn Fn(HttpRequest) -> HttpResponse + Sync + Send;
 
 // Take a single value from a header field and return a closure that updates the control flow of the current method
-type HttpFieldHandler = dyn Fn(String, RequestState) -> Option<RequestEffect> + Sync + Send;
+pub type HttpFieldHandler = dyn for<'req> Fn(String, &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> + Sync + Send;
 
 #[derive(Clone)]
 pub struct HttpMethodHandlerTable (

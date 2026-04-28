@@ -1,4 +1,3 @@
-use std::fmt::Result;
 use std::fs::File;
 use std::io::{BufReader, BufRead};
 use std::net::IpAddr;
@@ -6,7 +5,6 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use crate::HttpFieldHandlerTable;
-use crate::defaultfields;
 
 pub static CONFIG: OnceLock<HttpConfig> = OnceLock::new();
 

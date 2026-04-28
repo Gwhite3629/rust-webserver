@@ -60,7 +60,7 @@ fn handle_connection(mut stream: TcpStream, method_handlers: &HttpMethodHandlerT
 
     //let request_line = buf_reader.lines().next().unwrap().unwrap();
 
-    println!("Request: {http_request:#?}");
+    //println!("Request: {http_request:#?}");
 
     if http_request.is_empty() {
         return;
@@ -68,7 +68,7 @@ fn handle_connection(mut stream: TcpStream, method_handlers: &HttpMethodHandlerT
 
     let request: HttpRequest = HttpRequest::new(http_request.clone());
 
-    println!("Processed Request:\n{request}");
+    //println!("Processed Request:\n{request}");
 
     let len = match request.headers.get("Content-length") {
         Some(res) => res.parse::<usize>().unwrap(),
@@ -80,9 +80,9 @@ fn handle_connection(mut stream: TcpStream, method_handlers: &HttpMethodHandlerT
     buf_reader
         .read_exact(&mut content).expect("read failed");
 
-    let http_string: String = String::from_utf8(content).unwrap();
+    //let http_string: String = String::from_utf8(content).unwrap();
 
-    println!("Content: {:#?}", http_string);
+    //println!("Content: {:#?}", http_string);
 
     let response: HttpResponse = method_handlers.get(request.method).unwrap()(request);
 /*
