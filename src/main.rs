@@ -2,9 +2,7 @@ use std::net::TcpListener;
 use std::sync::Arc;
 
 use native_tls::{
-    Identity,
     TlsAcceptor,
-    TlsStream,
 };
 
 use rustwebserver::{
