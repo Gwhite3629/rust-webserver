@@ -25,25 +25,45 @@ Each request is handled by a seperate thread allowing for multiple connections a
 
 ### HTTPS
 
-Generate a key using:
+How to make a key and identity file:
 
-Code currently expects "default" as password
+```cd cert```
 
-```
-openssl req -x509 -out localhost.crt -keyout localhost.key \
-  -newkey rsa:2048 -nodes -sha256 \
-  -subj '/CN=localhost' -extensions EXT -config <( \
-   printf "[dn]\nCN=localhost\n[req]\ndistinguished_name = dn\n[EXT]\nsubjectAltName=DNS:localhost\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth")
+Generate root certificate key:
+```openssl genrsa -out root.pem 2048```
 
-openssl pkcs12 -export -out identity.pfx \
- -inkey localhost.key \
- -in localhost.crt 
+Generate root certificate self-signed certificate:
+```openssl req -x509 -new -sha256 -key root.pem -config root.conf -extensions v3_ca -out root.crt```
 
-```
+Verify certificate content:
+```openssl x509 -in root.crt -text -noout```
 
-With this add an alias to /etc/hosts to indicate 127.0.0.1 is localhost
-Then add the crt file to the browsers certificates
+Generate intermediate certificate key:
+```openssl genrsa -out intermediate.pem 2048```
 
+Generate intermediate certificate csr:
+```openssl req -new -sha256 -key intermediate.pem -config intermediate.conf -out intermediate.csr```
+
+Generate signed intermediate certificate
+```openssl x509 -days 365 -req -in intermediate.csr -CA root.crt -CAkey root.pem -CAcreateserial -out intermediate.crt```
+
+Generate user key:
+```openssl genrsa -out leaf.pem 2048```
+
+Generate user csr:
+```openssl req -new -sha256 -key leaf.pem -config leaf_req.conf -out leaf.csr```
+
+Generate signed user certificate:
+```openssl x509 -days 365 -req -in leaf.csr -CA intermediate.crt -CAkey intermediate.pem -CAcreateserial -out leaf.crt```
+
+Combine certs into chain pfx file
+```openssl pkcs12 -export -out identity.pfx -inkey leaf.pem -in leaf.crt -certfile intermediate.crt -certfile root.crt```
+
+Code expects default as password, could make this a config value
+
+Ensure that the server config file mentions the location of the identity.pfx file
+
+Import the root.crt to the browser
 
 ## TODO
 

@@ -11,7 +11,8 @@ use crate::{
     HttpMethodHandlerTable,
 };
 
-const MB: usize = 1000000;
+//const MB: usize = 1000000;
+const KB: usize = 1000;
 
 pub fn handle_connection(mut stream: TlsStream<TcpStream>, method_handlers: &HttpMethodHandlerTable) {
     let mut buf_reader = BufReader::new(&mut stream);
@@ -49,7 +50,7 @@ pub fn handle_connection(mut stream: TlsStream<TcpStream>, method_handlers: &Htt
 fn send_chunked(mut stream: TlsStream<TcpStream>, response: HttpResponse) {
 
     // Write chunked response
-    for chunk in response.content.chunks(1*MB) {
+    for chunk in response.content.chunks(1*KB) {
         let mut wr = Vec::<u8>::new();
         wr.append(&mut format!("{:x}", chunk.len()).to_ascii_lowercase().as_bytes().to_vec());
         wr.append(&mut "\r\n".as_bytes().to_vec());
