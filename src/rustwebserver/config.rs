@@ -1,10 +1,13 @@
-use std::fs::File;
+use std::fs::{DirEntry, File};
 use std::io::{BufReader, BufRead, Read};
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::collections::HashMap;
 use std::sync::OnceLock;
+use std::path::PathBuf;
 
-use native_tls::Identity;
+use rustls::{
+
+};
 
 use crate::HttpFieldHandlerTable;
 
@@ -13,10 +16,12 @@ pub static CONFIG: OnceLock<HttpConfig> = OnceLock::new();
 
 pub struct HttpConfig {
     pub path: String,
-    pub port: u16,
-    pub host: IpAddr,
+    pub addr: SocketAddr,
     pub field_handlers: HttpFieldHandlerTable,
-    pub identity: Identity,
+    pub root_certs: PathBuf,
+    pub certs: PathBuf,
+    pub crls: Vec<PathBuf>,
+    pub privkey: PathBuf,
 }
 
 impl HttpConfig {
@@ -24,22 +29,25 @@ impl HttpConfig {
         let params = HttpConfig::parse(args);
         HttpConfig { 
             path: params.get("Path").unwrap().to_string(), 
-            port: params.get("Port").unwrap().parse::<u16>().unwrap(), 
-            host: params.get("Host").unwrap().parse::<IpAddr>().unwrap(),
+            addr: SocketAddr::new(
+                params.get("Host").unwrap().parse::<IpAddr>().unwrap(),
+                params.get("Port").unwrap().parse::<u16>().unwrap()
+            ),
             field_handlers: HttpConfig::populate_fields(),
-            identity: HttpConfig::parse_cert(params.get("Identity").unwrap().to_string()),
+            root_certs: PathBuf::from(params.get("Root").unwrap().to_string()),
+            certs: PathBuf::from(params.get("Cert").unwrap().to_string()),
+            crls: {
+                let mut v = Vec::<PathBuf>::new();
+                for d in PathBuf::from(params.get("CRL").unwrap().to_string()).read_dir().unwrap() {
+                    let () = match d {
+                        Ok(d) => v.push(PathBuf::from(d.file_name())),
+                        Err(_) => (),
+                    };
+                }
+                v
+                },
+            privkey: PathBuf::from(params.get("Key").unwrap().to_string()),
         }
-    }
-
-    pub fn parse_cert(fname: String) -> Identity {
-        let mut file = File::open(fname).unwrap();
-        let mut identity = vec![];
-        file.read_to_end(&mut identity).unwrap();
-        let identity = match Identity::from_pkcs12(&identity, "default") {
-            Ok(identity) => identity,
-            Err(error) => panic!("Error reading identity file {error:?}"),
-        };
-        identity
     }
 
     pub fn parse(args: Vec<String>) -> HashMap<String,String> {

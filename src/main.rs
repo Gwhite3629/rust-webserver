@@ -1,15 +1,16 @@
-use std::net::TcpListener;
+use mio::net::TcpListener;
 use std::sync::Arc;
 
-use native_tls::{
-    TlsAcceptor,
+use rustls::{
+    server::{
+        Acceptor,
+    },
 };
 
 use rustwebserver::{
     HttpConfig,
     HttpMethodHandlerTable,
     ThreadPool,
-    handle_connection,
     CONFIG,
 };
 
@@ -26,36 +27,54 @@ fn main() {
         Err(_) => panic!("Failed to setup config"),
     }
 
-    let listener = match TcpListener::bind((CONFIG.get().unwrap().host, CONFIG.get().unwrap().port)) {
+    let _listener = match TcpListener::bind(CONFIG.get().unwrap().addr) {
         Ok(listener) => listener,
         Err(error) => panic!("Problem binding TcpListener: {error:?}"),
     };
 
-    let acceptor = match TlsAcceptor::new(CONFIG.get().unwrap().identity.clone()) {
-        Ok(acceptor) => acceptor,
-        Err(error) => panic!("Problem reading identity file: {error:?}"),
-    };
-    let acceptor = Arc::new(acceptor);
+    let acceptor = Acceptor::default();
+    let _acceptor = Arc::new(acceptor);
 
 
-    let pool = ThreadPool::new(4);
+    let _pool = ThreadPool::new(4);
 
     let mut method_handlers = HttpMethodHandlerTable::new();
     method_handlers.use_defaults();
 
+    /*
     for stream in listener.incoming() {
-        let _stream = match stream {
+        let mut _stream = match stream {
             Ok(_stream) => _stream,
             Err(error) => panic!("Error receiving packet from listener: {error:?}"),
         };
 
         let thread_method_handlers = method_handlers.clone();
+        let mut acceptor = acceptor.clone();
 
-        let acceptor = acceptor.clone();
+        let accepted = loop {
+            match acceptor.accept() {
+                Ok(Some(accepted)) => break accepted,
+                Ok(None) => continue,
+                Err((e, mut alert)) => {
+                    alert.write_all(&mut _stream).unwrap();
+                    panic!("error accepting connection: {e}");
+                }
+            }
+        };
 
+
+        let config = test_pki.server_config(&args.crl_path, accepted.client_hello());
+        let mut conn = match accepted.into_connection(config) {
+            Ok(conn) => conn,
+            Err((e, mut alert)) => {
+                alert.write_all(&mut _stream).unwrap();
+                panic!("error completing accepting connection: {e}");
+            }
+        };
         pool.execute(move || {
-            let stream = acceptor.accept(_stream).unwrap();
-            handle_connection(stream, &thread_method_handlers);
+            acceptor.read_tls(&mut _stream).unwrap();
+            handle_connection(&mut _stream, &mut conn, &thread_method_handlers);
         });
     }
+    */
 }
