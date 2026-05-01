@@ -1,15 +1,11 @@
-use std::fs::{DirEntry, File};
-use std::io::{BufReader, BufRead, Read};
+use std::fs::{File};
+use std::io::{BufReader, BufRead};
 use std::net::{IpAddr, SocketAddr};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::path::PathBuf;
 
-use rustls::{
-
-};
-
-use crate::HttpFieldHandlerTable;
+use crate::{HttpFieldHandlerTable, HttpMethodHandlerTable};
 
 pub static CONFIG: OnceLock<HttpConfig> = OnceLock::new();
 
@@ -17,6 +13,7 @@ pub static CONFIG: OnceLock<HttpConfig> = OnceLock::new();
 pub struct HttpConfig {
     pub path: String,
     pub addr: SocketAddr,
+    pub method_handlers: HttpMethodHandlerTable,
     pub field_handlers: HttpFieldHandlerTable,
     pub root_certs: PathBuf,
     pub certs: PathBuf,
@@ -33,6 +30,7 @@ impl HttpConfig {
                 params.get("Host").unwrap().parse::<IpAddr>().unwrap(),
                 params.get("Port").unwrap().parse::<u16>().unwrap()
             ),
+            method_handlers: HttpConfig::populate_methods(),
             field_handlers: HttpConfig::populate_fields(),
             root_certs: PathBuf::from(params.get("Root").unwrap().to_string()),
             certs: PathBuf::from(params.get("Cert").unwrap().to_string()),
@@ -72,7 +70,13 @@ impl HttpConfig {
         params
     }
 
-    pub fn populate_fields() -> HttpFieldHandlerTable{
+    pub fn populate_methods() -> HttpMethodHandlerTable {
+        let mut ret = HttpMethodHandlerTable::new();
+        ret.use_defaults();
+        ret
+    }
+
+    pub fn populate_fields() -> HttpFieldHandlerTable {
         let mut ret = HttpFieldHandlerTable::new();
         ret.use_defaults();
         ret

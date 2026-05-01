@@ -14,6 +14,6 @@ name = "rustwebserver"
 brotlic = "0.8.2"
 flate2 = "1.1.9"
 lazy_static = "1.5.0"
-mio = { version = "1.2.0", features = ["net"] }
+mio = { version = "1.2.0", features = ["net", "os-poll"] }
 regex = "1.12.3"
 rustls = "0.23.40"

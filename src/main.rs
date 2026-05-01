@@ -1,18 +1,18 @@
-use mio::net::TcpListener;
-use std::sync::Arc;
+use std::io::ErrorKind;
 
-use rustls::{
-    server::{
-        Acceptor,
-    },
+use mio::{
+    Events, Interest, Poll, net::TcpListener
 };
 
 use rustwebserver::{
     HttpConfig,
-    HttpMethodHandlerTable,
-    ThreadPool,
+    Server,
+    Processor,
+    tls_setup,
     CONFIG,
 };
+
+const LISTENER: mio::Token = mio::Token(0);
 
 fn main() {
 
@@ -27,54 +27,43 @@ fn main() {
         Err(_) => panic!("Failed to setup config"),
     }
 
-    let _listener = match TcpListener::bind(CONFIG.get().unwrap().addr) {
+    let server_config = tls_setup();
+
+    let mut poll = match Poll::new() {
+        Ok(p) => p,
+        Err(error) => panic!("Failed to create os-poll structure {error:?}"),
+    };
+
+    let mut listener = match TcpListener::bind(CONFIG.get().unwrap().addr) {
         Ok(listener) => listener,
         Err(error) => panic!("Problem binding TcpListener: {error:?}"),
     };
 
-    let acceptor = Acceptor::default();
-    let _acceptor = Arc::new(acceptor);
+    match poll.registry().register(&mut listener, LISTENER, Interest::READABLE) {
+        Ok(_) => (),
+        Err(error) => panic!("Failed to register listener: {error:?}"),
+    };
 
+    let mut server = Server::new(listener, server_config, Processor::HTTP);
 
-    let _pool = ThreadPool::new(4);
+    let mut events = Events::with_capacity(256);
 
-    let mut method_handlers = HttpMethodHandlerTable::new();
-    method_handlers.use_defaults();
+    //let pool = ThreadPool::new(4);
 
-    /*
-    for stream in listener.incoming() {
-        let mut _stream = match stream {
-            Ok(_stream) => _stream,
-            Err(error) => panic!("Error receiving packet from listener: {error:?}"),
-        };
+    loop {
+        match poll.poll(&mut events, None) {
+            Ok(_) => {},
+            Err(error) if error.kind() == ErrorKind::Interrupted => continue ,
+            Err(error) => {
+                panic!("Poll failed: {error:?}");
+            },
+        }
 
-        let thread_method_handlers = method_handlers.clone();
-        let mut acceptor = acceptor.clone();
-
-        let accepted = loop {
-            match acceptor.accept() {
-                Ok(Some(accepted)) => break accepted,
-                Ok(None) => continue,
-                Err((e, mut alert)) => {
-                    alert.write_all(&mut _stream).unwrap();
-                    panic!("error accepting connection: {e}");
-                }
+        for event in events.iter() {
+            match event.token() {
+                LISTENER => server.accept_new_connection(poll.registry()).expect("Error accepting connection."),
+                _ => server.established_connection(poll.registry(), event),
             }
-        };
-
-
-        let config = test_pki.server_config(&args.crl_path, accepted.client_hello());
-        let mut conn = match accepted.into_connection(config) {
-            Ok(conn) => conn,
-            Err((e, mut alert)) => {
-                alert.write_all(&mut _stream).unwrap();
-                panic!("error completing accepting connection: {e}");
-            }
-        };
-        pool.execute(move || {
-            acceptor.read_tls(&mut _stream).unwrap();
-            handle_connection(&mut _stream, &mut conn, &thread_method_handlers);
-        });
+        }
     }
-    */
 }

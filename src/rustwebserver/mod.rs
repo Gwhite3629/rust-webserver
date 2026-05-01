@@ -11,6 +11,10 @@ mod http;
 
 mod core;
 
+mod httpengine;
+
+pub use httpengine::HttpProcessor;
+
 pub use http::HttpFields;
 pub use http::CaseInsensitiveString;
 pub use http::HttpMethod;
@@ -20,7 +24,9 @@ pub use http::URI;
 pub use defaultfields::DefaultFields;
 
 pub use thread::ThreadPool;
-pub use core::handle_connection;
+pub use core::Processor;
+pub use core::tls_setup;
+pub use core::Server;
 
 pub use request::HttpRequest;
 pub use response::HttpResponse;

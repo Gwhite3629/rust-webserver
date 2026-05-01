@@ -1,33 +1,55 @@
 use std::{
-    collections::HashMap, 
-    io::{BufReader, prelude::*}, 
-    net::TcpStream, 
-    path::Path, 
+    collections::HashMap,
+    io::{
+        Error,
+        ErrorKind,
+        prelude::*
+    },
+    net::Shutdown,
+    path::Path,
     sync::Arc
 };
 
-use rustls::{RootCertStore, ServerConfig, ServerConnection};
-use rustls::pki_types::{CertificateDer, pem::PemObject, PrivateKeyDer, CertificateRevocationListDer};
-use rustls::server::WebPkiClientVerifier;
+use rustls::{
+    RootCertStore,
+    ServerConfig,
+    ServerConnection,
+    pki_types::{
+        CertificateDer,
+        pem::PemObject,
+        PrivateKeyDer,
+        CertificateRevocationListDer
+    },
+    server::WebPkiClientVerifier,
+};
 
-use mio::net::TcpListener;
+use mio::{
+    Interest,
+    Registry,
+    Token,
+    event::Event,
+    net::{
+        TcpListener,
+        TcpStream
+    },
+};
 
 use crate::{
-    HttpRequest,
-    HttpResponse,
-    HttpMethodHandlerTable,
+    HttpProcessor,
     CONFIG
 };
 
-enum ServerError {
-
+#[derive(Clone)]
+pub enum Processor {
+    HTTP,
 }
 
-struct Server {
+pub struct Server {
     listener: TcpListener,
     connections: HashMap<mio::Token, OpenConnection>,
     next_id: usize,
     tls_config: Arc<ServerConfig>,
+    engine: Processor,
 }
 
 struct OpenConnection {
@@ -36,31 +58,207 @@ struct OpenConnection {
     closing: bool,
     closed: bool,
     tls_conn: ServerConnection,
-    back: Option<TcpStream>,
     sent_http_response: bool,
+    engine: Processor,
 }
 
-//const MB: usize = 1000000;
-const KB: usize = 1000;
-
 impl Server {
-    fn new(listener: TcpListener, tls_config: Arc<ServerConfig>) -> Self {
+    pub fn new(listener: TcpListener, tls_config: Arc<ServerConfig>, mode: Processor) -> Self {
         Server { 
             listener, 
             connections: HashMap::new(), 
             next_id: 2,
-            tls_config
+            tls_config,
+            engine: match mode {
+                Processor::HTTP => Processor::HTTP
+            }
         }
     }
 
-    //fn accept_new_connection(&mut self, )
+    pub fn accept_new_connection(&mut self, reg: &Registry) -> Result<(), Error> {
+        loop {
+            match self.listener.accept() {
+                Ok((socket, _)) => {
+
+                    let tls_conn = ServerConnection::new(self.tls_config.clone()).unwrap();
+
+                    let token = Token(self.next_id);
+                    self.next_id += 1;
+
+                    let mut connection = OpenConnection::new(socket, token, tls_conn, self.engine.clone());
+                    connection.register(reg);
+                    self.connections.insert(token, connection);
+
+                }
+                Err(error) if error.kind() == ErrorKind::WouldBlock => return Ok(()),
+                Err(error) => {
+                    println!("Error encountered while accepting connection: {error:?}");
+                    return Err(error);
+                }
+            }
+        }
+    }
+    pub fn established_connection(&mut self, reg: &Registry, event: &Event) {
+        let token = event.token();
+
+        if self.connections.contains_key(&token) {
+            self.connections.get_mut(&token).unwrap().ready(reg, event);
+
+            if self.connections[&token].is_closed() {
+                self.connections.remove(&token);
+            }
+        }
+    }
 }
+
+impl OpenConnection {
+    pub fn new(socket: TcpStream, token: Token, tls_conn: ServerConnection, serv: Processor) -> Self {
+        Self {
+            socket,
+            token,
+            closing: false,
+            closed: false,
+            tls_conn,
+            sent_http_response: false,
+            engine: serv,
+        }
+    }
+
+    fn ready(&mut self, reg: &Registry, event: &Event) {
+        if event.is_readable() {
+            self.tls_read();
+            self.try_text_read();
+        }
+
+        if event.is_writable() {
+            self.tls_write();
+        }
+
+        if self.closing {
+            let _ = self
+                .socket
+                .shutdown(Shutdown::Both);
+            self.closed = true;
+        }
+        self.deregister(reg);
+    }
+
+    fn tls_read(&mut self) {
+        match self.tls_conn.read_tls(&mut self.socket) {
+            Err(error) => {
+                if let ErrorKind::WouldBlock = error.kind() {
+                    return;
+                }
+
+                // Log stuff
+                //error!("Read error: {error:?}");
+                self.closing = true;
+                return;
+            }
+            Ok(0) => {
+                self.closing = true;
+                return;
+
+            }
+            Ok(_) => {}
+        };
+
+        if let Err(_error) = self.tls_conn.process_new_packets() {
+            // Log stuff
+            //error!("Cannot process packet: {error:?}");
+
+            self.tls_write();
+            self.closing = true;
+        }
+    }
+
+    fn try_text_read(&mut self) {
+        if let Ok(io_state) = self.tls_conn.process_new_packets() {
+            if let Some(mut early_data) = self.tls_conn.early_data() {
+                let mut buf = Vec::new();
+                early_data.read_to_end(&mut buf).unwrap();
+
+                if !buf.is_empty() {
+                    self.incoming_text(&buf);
+                    return;
+                }
+            }
+
+            if io_state.plaintext_bytes_to_read() > 0 {
+                let mut buf = vec![0u8; io_state.plaintext_bytes_to_read()];
+
+                self.tls_conn.reader().read_exact(&mut buf).unwrap();
+
+                self.incoming_text(&buf);
+            }
+        }
+    }
+
+    fn tls_write(&mut self) {
+        let rc = self.tls_conn.write_tls(&mut self.socket);
+        if rc.is_err() {
+            // Log stuff
+            //error!("Write failed: {rc:?}");
+            self.closing = true;
+        }
+    }
+
+    fn incoming_text(&mut self, buf: &[u8]) {
+        let () = match self.engine {
+            Processor::HTTP => {
+                let res = match HttpProcessor::handle_connection(buf) {
+                    Some(res) => res,
+                    None => {
+                        self.tls_conn.send_close_notify();
+                        return;
+                    }
+                };
+                if !self.sent_http_response {
+                    self.tls_conn.writer().write_all(res.to_string().as_bytes()).unwrap();
+                    self.sent_http_response = true;
+                }
+                for chunk in HttpProcessor::to_chunks(res) {
+                    self.tls_conn.writer().write(&chunk).unwrap();
+                }
+                self.tls_conn.send_close_notify();
+            }
+        };
+    }
+
+    fn register(&mut self, reg: &Registry) {
+        let event_set = self.event_set();
+        reg.register(&mut self.socket, self.token, event_set).unwrap();
+    }
+
+    fn deregister(&mut self, reg: &Registry) {
+        reg.deregister(&mut self.socket).unwrap();
+    }
+
+    fn event_set(&self) -> Interest {
+        let rd = self.tls_conn.wants_read();
+        let wr = self.tls_conn.wants_write();
+
+        if rd && wr {
+            Interest::READABLE | Interest::WRITABLE
+        } else if wr {
+            Interest::WRITABLE
+        } else {
+            Interest::READABLE
+        }
+    }
+
+    fn is_closed(&self) -> bool {
+        self.closed
+    }
+}
+
+
 
 // certs
 // crl list
 // server private key
 
-fn tls_setup() -> Arc<ServerConfig> {
+pub fn tls_setup() -> Arc<ServerConfig> {
 
     let root_certs = load_certs(&CONFIG.get().unwrap().root_certs);
     let mut auth_roots = RootCertStore::empty();
@@ -110,63 +308,3 @@ fn load_crls(
         })
         .collect()
 }
-
-
-pub fn handle_connection(mut stream: &TcpStream, mut _conn: &ServerConnection, method_handlers: &HttpMethodHandlerTable) {
-    let mut buf_reader = BufReader::new(&mut stream);
-
-    let raw_request: Vec<_> = buf_reader
-        .by_ref()
-        .lines()
-        .map(|result| result.unwrap())
-        .take_while(|line| !line.is_empty())
-        .collect();
-
-
-    // Terminate connection if no request made
-    if raw_request.is_empty() {
-        return;
-    }
-
-    let request: HttpRequest = HttpRequest::new(raw_request);
-
-    let response: HttpResponse = match method_handlers.get(request.method) {
-        Some(call) => call(request),
-        None => return,
-    };
-
-    // Write response header
-    match stream.write_all(response.to_string().as_bytes()) {
-        Ok(result) => result,
-        Err(error) => panic!("Could not write response headers: {error:?}"),
-    };
-
-    //send_chunked(stream, response);
-
-}
-
-/*
-fn send_chunked(mut stream: TlsStream<TcpStream>, response: HttpResponse) {
-
-    // Write chunked response
-    for chunk in response.content.chunks(1*KB) {
-        let mut wr = Vec::<u8>::new();
-        wr.append(&mut format!("{:x}", chunk.len()).to_ascii_lowercase().as_bytes().to_vec());
-        wr.append(&mut "\r\n".as_bytes().to_vec());
-        wr.append(&mut chunk.to_vec());
-        wr.append(&mut "\r\n".as_bytes().to_vec());
-        match stream.write(&wr) {
-            Ok(_) => (),
-            Err(error) => panic!("Could not write response headers: {error:?}"),
-        }
-    }
-    // Indicate chunked finished
-    let mut wr = Vec::<u8>::new();
-    wr.append(&mut "0\r\n".as_bytes().to_vec());
-    wr.append(&mut "\r\n".as_bytes().to_vec());
-    match stream.write(&wr) {
-        Ok(_) => (),
-        Err(error) => panic!("Could not write response headers: {error:?}"),
-    }
-}
-*/
