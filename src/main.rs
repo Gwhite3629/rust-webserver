@@ -38,6 +38,8 @@ fn main() {
         Ok(listener) => listener,
         Err(error) => panic!("Problem binding TcpListener: {error:?}"),
     };
+    let addr = listener.local_addr().unwrap();
+    println!("Connection watching: {addr}");
 
     match poll.registry().register(&mut listener, LISTENER, Interest::READABLE) {
         Ok(_) => (),
@@ -60,6 +62,7 @@ fn main() {
         }
 
         for event in events.iter() {
+            println!("Got event");
             match event.token() {
                 LISTENER => server.accept_new_connection(poll.registry()).expect("Error accepting connection."),
                 _ => server.established_connection(poll.registry(), event),

@@ -11,16 +11,16 @@ use std::{
 };
 
 use rustls::{
-    RootCertStore,
+    //RootCertStore,
     ServerConfig,
     ServerConnection,
     pki_types::{
         CertificateDer,
         pem::PemObject,
         PrivateKeyDer,
-        CertificateRevocationListDer
+        //CertificateRevocationListDer
     },
-    server::WebPkiClientVerifier,
+    //server::WebPkiClientVerifier,
 };
 
 use mio::{
@@ -79,7 +79,7 @@ impl Server {
         loop {
             match self.listener.accept() {
                 Ok((socket, _)) => {
-
+                    println!("Accepting new connection");
                     let tls_conn = ServerConnection::new(self.tls_config.clone()).unwrap();
 
                     let token = Token(self.next_id);
@@ -102,6 +102,7 @@ impl Server {
         let token = event.token();
 
         if self.connections.contains_key(&token) {
+            println!("Got established connection");
             self.connections.get_mut(&token).unwrap().ready(reg, event);
 
             if self.connections[&token].is_closed() {
@@ -126,46 +127,52 @@ impl OpenConnection {
 
     fn ready(&mut self, reg: &Registry, event: &Event) {
         if event.is_readable() {
+            println!("Reading event");
             self.tls_read();
             self.try_text_read();
         }
 
         if event.is_writable() {
+            println!("Writing event");
             self.tls_write();
         }
 
         if self.closing {
+            println!("Closing event");
             let _ = self
                 .socket
                 .shutdown(Shutdown::Both);
             self.closed = true;
+            self.deregister(reg);
+        } else {
+            self.reregister(reg);
         }
-        self.deregister(reg);
     }
 
     fn tls_read(&mut self) {
         match self.tls_conn.read_tls(&mut self.socket) {
             Err(error) => {
                 if let ErrorKind::WouldBlock = error.kind() {
+                    println!("Would block");
                     return;
                 }
-
+                
                 // Log stuff
-                //error!("Read error: {error:?}");
+                println!("Read error: {error:?}");
                 self.closing = true;
                 return;
             }
             Ok(0) => {
+                println!("Closing");
                 self.closing = true;
                 return;
-
             }
-            Ok(_) => {}
+            Ok(_) => {println!("TLS read successful");}
         };
 
-        if let Err(_error) = self.tls_conn.process_new_packets() {
+        if let Err(error) = self.tls_conn.process_new_packets() {
             // Log stuff
-            //error!("Cannot process packet: {error:?}");
+            println!("Cannot process packet: {error:?}");
 
             self.tls_write();
             self.closing = true;
@@ -174,17 +181,24 @@ impl OpenConnection {
 
     fn try_text_read(&mut self) {
         if let Ok(io_state) = self.tls_conn.process_new_packets() {
+            println!("got io_state");
             if let Some(mut early_data) = self.tls_conn.early_data() {
                 let mut buf = Vec::new();
                 early_data.read_to_end(&mut buf).unwrap();
+                println!("Got early text");
 
                 if !buf.is_empty() {
+                    println!("Processing early text");
                     self.incoming_text(&buf);
                     return;
                 }
             }
 
+            let n = io_state.plaintext_bytes_to_read();
+            println!("bytes: {n}");
+
             if io_state.plaintext_bytes_to_read() > 0 {
+                println!("Processing plain test");
                 let mut buf = vec![0u8; io_state.plaintext_bytes_to_read()];
 
                 self.tls_conn.reader().read_exact(&mut buf).unwrap();
@@ -198,12 +212,14 @@ impl OpenConnection {
         let rc = self.tls_conn.write_tls(&mut self.socket);
         if rc.is_err() {
             // Log stuff
-            //error!("Write failed: {rc:?}");
+            println!("Write failed: {rc:?}");
             self.closing = true;
         }
     }
 
     fn incoming_text(&mut self, buf: &[u8]) {
+        let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
+        println!("\tRAW TEXT: {print_str}");
         let () = match self.engine {
             Processor::HTTP => {
                 let res = match HttpProcessor::handle_connection(buf) {
@@ -228,6 +244,11 @@ impl OpenConnection {
     fn register(&mut self, reg: &Registry) {
         let event_set = self.event_set();
         reg.register(&mut self.socket, self.token, event_set).unwrap();
+    }
+
+    fn reregister(&mut self, reg: &mio::Registry) {
+        let event_set = self.event_set();
+        reg.reregister(&mut self.socket, self.token, event_set).unwrap();
     }
 
     fn deregister(&mut self, reg: &Registry) {
@@ -259,26 +280,26 @@ impl OpenConnection {
 // server private key
 
 pub fn tls_setup() -> Arc<ServerConfig> {
-
+    /*
     let root_certs = load_certs(&CONFIG.get().unwrap().root_certs);
     let mut auth_roots = RootCertStore::empty();
     for root in root_certs {
         auth_roots.add(root).unwrap();
     }
-    let crl_list = load_crls(CONFIG.get().unwrap().crls.iter());
+    //let crl_list = load_crls(CONFIG.get().unwrap().crls.iter());
 
     let auth = 
     WebPkiClientVerifier::builder(auth_roots.into())
             .with_crls(crl_list)
             .build()
             .unwrap();
+    */
 
     let certs = load_certs(&CONFIG.get().unwrap().certs);
     let privkey = load_private_key(&CONFIG.get().unwrap().privkey);
 
-
     let config = ServerConfig::builder()
-        .with_client_cert_verifier(auth)
+        .with_no_client_auth()
         .with_single_cert(
             certs,
         privkey
@@ -299,6 +320,7 @@ fn load_private_key(filename: &Path) -> PrivateKeyDer<'static> {
     PrivateKeyDer::from_pem_file(filename).expect("cannot read private key file")
 }
 
+/*
 fn load_crls(
     filenames: impl Iterator<Item = impl AsRef<Path>>,
 ) -> Vec<CertificateRevocationListDer<'static>> {
@@ -308,3 +330,4 @@ fn load_crls(
         })
         .collect()
 }
+        */

@@ -9,15 +9,14 @@ use crate::{HttpFieldHandlerTable, HttpMethodHandlerTable};
 
 pub static CONFIG: OnceLock<HttpConfig> = OnceLock::new();
 
-
 pub struct HttpConfig {
     pub path: String,
     pub addr: SocketAddr,
     pub method_handlers: HttpMethodHandlerTable,
     pub field_handlers: HttpFieldHandlerTable,
-    pub root_certs: PathBuf,
+    //pub root_certs: PathBuf,
     pub certs: PathBuf,
-    pub crls: Vec<PathBuf>,
+    //pub crls: Vec<PathBuf>,
     pub privkey: PathBuf,
 }
 
@@ -32,8 +31,9 @@ impl HttpConfig {
             ),
             method_handlers: HttpConfig::populate_methods(),
             field_handlers: HttpConfig::populate_fields(),
-            root_certs: PathBuf::from(params.get("Root").unwrap().to_string()),
+            //root_certs: PathBuf::from(params.get("Root").unwrap().to_string()),
             certs: PathBuf::from(params.get("Cert").unwrap().to_string()),
+            /*
             crls: {
                 let mut v = Vec::<PathBuf>::new();
                 for d in PathBuf::from(params.get("CRL").unwrap().to_string()).read_dir().unwrap() {
@@ -43,7 +43,8 @@ impl HttpConfig {
                     };
                 }
                 v
-                },
+                }
+            */
             privkey: PathBuf::from(params.get("Key").unwrap().to_string()),
         }
     }
