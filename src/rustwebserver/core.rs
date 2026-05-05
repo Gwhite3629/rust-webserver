@@ -1,9 +1,7 @@
 use std::{
     collections::HashMap,
     io::{
-        Error,
-        ErrorKind,
-        prelude::*
+        BufReader, Error, ErrorKind, prelude::*
     },
     net::Shutdown,
     path::Path,
@@ -88,7 +86,7 @@ impl Server {
             Err(error) => panic!("Problem binding TcpListener: {error:?}"),
         };
         let addr = listener.local_addr().unwrap();
-        println!("Connection watching: {addr}");
+        println!("{} is watching: {}", name, addr);
 
         Server { 
             name,
@@ -137,7 +135,7 @@ impl Server {
         loop {
             match self.listener.accept() {
                 Ok((socket, _)) => {
-                    println!("Accepting new connection");
+                    println!("Accepting new connection on {}", self.name);
                     let tls_conn = match self.protocol {
                         Protocol::HTTP => {
                             None
@@ -167,7 +165,7 @@ impl Server {
         let token = event.token();
 
         if self.connections.contains_key(&token) {
-            println!("Got established connection");
+            println!("Got established connection on {}", self.name);
             self.connections.get_mut(&token).unwrap().ready(reg, event);
 
             if self.connections[&token].is_closed() {
@@ -292,12 +290,35 @@ impl OpenConnection {
 
 
     fn try_text_read(&mut self) {
+        let mut buf = vec![0u8; 4*1024];
+        let mut n = 0;
+        match self.socket.read(&mut buf) {
+            Err(error) => {
+                if let ErrorKind::WouldBlock = error.kind() {
+                    println!("Would block");
+                    return;
+                }
+                
+                // Log stuff
+                println!("Read error: {error:?}");
+                self.closing = true;
+                return;
+            }
+            Ok(0) => {
+                println!("Closing");
+                self.closing = true;
+                return;
+            }
+            Ok(n_read) => {
+                n = n_read;
+                println!("RAW read successful");}
+        };
 
-        let mut buf = Vec::new();
-
-        self.socket.read(&mut buf).unwrap();
-
-        self.incoming_text(&buf);
+        //let n = self.socket.read(&mut buf).unwrap();
+        println!("bytes: {n}");
+        if n > 0 {
+            self.incoming_text(&buf);
+        }
     }
 
     fn tls_write(&mut self) {
@@ -311,7 +332,6 @@ impl OpenConnection {
 
     fn incoming_text(&mut self, buf: &[u8]) {
         let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
-        println!("\tRAW TEXT: {print_str}");
         match self.engine {
             Processor::HTTP => {
                 match self.protocol {
@@ -321,7 +341,7 @@ impl OpenConnection {
                             None => return,
                         };
                         if !self.sent_http_response {
-                            self.socket.write_all(buf).unwrap();
+                            self.socket.write_all(res.to_string().as_bytes()).unwrap();
                             self.sent_http_response = true;
                         }
                         for chunk in HttpProcessor::to_chunks(res) {
@@ -369,7 +389,7 @@ impl OpenConnection {
     fn event_set(&self) -> Interest {
         let (rd, wr) = match self.protocol {
             Protocol::HTTP => {
-                (!self.closing, !self.sent_http_response)
+                (true, true)
             },
             Protocol::HTTPS => {
                 (self.tls_conn.as_ref().unwrap().wants_read(), self.tls_conn.as_ref().unwrap().wants_write())
