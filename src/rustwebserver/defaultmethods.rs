@@ -24,12 +24,12 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
     let mut contents = Vec::<u8>::new();
 
     let req_path = Path::new(req.target.path.as_str());
-    let base = Path::new(&CONFIG.get().unwrap().path);
+    let base = Path::new(&CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().path);
     let path = Path::new(base);
     let final_path: String;
 
 
-    if is_valid_path(&req_path) {
+    if is_valid_path(&req_path, &req.server_name) {
         currentstatus = HttpStatus::OK;
         final_path = path.join(&req_path.strip_prefix("/").unwrap()).to_str().unwrap().to_string();
     } else {
@@ -46,7 +46,7 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
 
     // Loop over request headers and call custom methods
     for (key, val) in req.headers {
-        let () = match CONFIG.get().unwrap().field_handlers.get(&key) {
+        let () = match CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().field_handlers.get(&key) {
             Some(fun) => {
                 match DefaultFields::from_string(key).unwrap() {
                     DefaultFields::ACCEPT => {
@@ -163,7 +163,7 @@ pub fn handle_trace(req: HttpRequest) -> HttpResponse {
 
     // Loop over request headers and call custom methods
     for (key, val) in req.headers {
-        let () = match CONFIG.get().unwrap().field_handlers.get(&key) {
+        let () = match CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().field_handlers.get(&key) {
             Some(fun) => {
                 match DefaultFields::from_string(key).unwrap() {
                     DefaultFields::ACCEPT => {

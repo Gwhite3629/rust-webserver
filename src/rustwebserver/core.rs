@@ -28,6 +28,8 @@ use mio::{
     Registry,
     Token,
     event::Event,
+    Events,
+    Poll,
     net::{
         TcpListener,
         TcpStream
@@ -39,12 +41,15 @@ use crate::{
     CONFIG
 };
 
+pub const LISTENER: mio::Token = mio::Token(0);
+
 #[derive(Clone)]
 pub enum Processor {
     HTTP,
 }
 
 pub struct Server {
+    name: String,
     listener: TcpListener,
     connections: HashMap<mio::Token, OpenConnection>,
     next_id: usize,
@@ -53,6 +58,7 @@ pub struct Server {
 }
 
 struct OpenConnection {
+    name: String,
     socket: TcpStream,
     token: mio::Token,
     closing: bool,
@@ -63,14 +69,56 @@ struct OpenConnection {
 }
 
 impl Server {
-    pub fn new(listener: TcpListener, tls_config: Arc<ServerConfig>, mode: Processor) -> Self {
+    pub fn new(name: String) -> Self {
+        let tls_config = tls_setup(name.clone());
+
+        let mode = CONFIG.get().unwrap().servers.get(&name).unwrap().protocol.to_processor();
+
+        let listener = match TcpListener::bind(CONFIG.get().unwrap().servers.get(&name).unwrap().addr) {
+            Ok(listener) => listener,
+            Err(error) => panic!("Problem binding TcpListener: {error:?}"),
+        };
+        let addr = listener.local_addr().unwrap();
+        println!("Connection watching: {addr}");
+
         Server { 
+            name,
             listener, 
             connections: HashMap::new(), 
             next_id: 2,
             tls_config,
-            engine: match mode {
-                Processor::HTTP => Processor::HTTP
+            engine: mode
+        }
+    }
+
+    pub fn start(&mut self) {
+
+        let mut poll = match Poll::new() {
+            Ok(p) => p,
+            Err(error) => panic!("Failed to create os-poll structure {error:?}"),
+        };
+        let mut events = Events::with_capacity(256);
+
+        match poll.registry().register(&mut self.listener, LISTENER, Interest::READABLE) {
+            Ok(_) => (),
+            Err(error) => panic!("Failed to register listener: {error:?}"),
+        };
+
+        loop {
+            match poll.poll(&mut events, None) {
+                Ok(_) => {},
+                Err(error) if error.kind() == ErrorKind::Interrupted => continue ,
+                Err(error) => {
+                    panic!("Poll failed: {error:?}");
+                },
+            }
+
+            for event in events.iter() {
+                println!("Got event");
+                match event.token() {
+                    LISTENER => self.accept_new_connection(poll.registry()).expect("Error accepting connection."),
+                    _ => self.established_connection(poll.registry(), event),
+                }
             }
         }
     }
@@ -85,7 +133,7 @@ impl Server {
                     let token = Token(self.next_id);
                     self.next_id += 1;
 
-                    let mut connection = OpenConnection::new(socket, token, tls_conn, self.engine.clone());
+                    let mut connection = OpenConnection::new(self.name.clone(), socket, token, tls_conn, self.engine.clone());
                     connection.register(reg);
                     self.connections.insert(token, connection);
 
@@ -113,8 +161,9 @@ impl Server {
 }
 
 impl OpenConnection {
-    pub fn new(socket: TcpStream, token: Token, tls_conn: ServerConnection, serv: Processor) -> Self {
+    pub fn new(name: String, socket: TcpStream, token: Token, tls_conn: ServerConnection, serv: Processor) -> Self {
         Self {
+            name,
             socket,
             token,
             closing: false,
@@ -222,7 +271,7 @@ impl OpenConnection {
         println!("\tRAW TEXT: {print_str}");
         let () = match self.engine {
             Processor::HTTP => {
-                let res = match HttpProcessor::handle_connection(buf) {
+                let res = match HttpProcessor::handle_connection(buf, self.name.clone()) {
                     Some(res) => res,
                     None => {
                         self.tls_conn.send_close_notify();
@@ -279,7 +328,7 @@ impl OpenConnection {
 // crl list
 // server private key
 
-pub fn tls_setup() -> Arc<ServerConfig> {
+pub fn tls_setup(name: String) -> Arc<ServerConfig> {
     /*
     let root_certs = load_certs(&CONFIG.get().unwrap().root_certs);
     let mut auth_roots = RootCertStore::empty();
@@ -295,8 +344,8 @@ pub fn tls_setup() -> Arc<ServerConfig> {
             .unwrap();
     */
 
-    let certs = load_certs(&CONFIG.get().unwrap().certs);
-    let privkey = load_private_key(&CONFIG.get().unwrap().privkey);
+    let certs = load_certs(&CONFIG.get().unwrap().servers.get(&name).unwrap().certs);
+    let privkey = load_private_key(&CONFIG.get().unwrap().servers.get(&name).unwrap().privkey);
 
     let config = ServerConfig::builder()
         .with_no_client_auth()

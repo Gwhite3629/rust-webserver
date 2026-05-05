@@ -73,10 +73,6 @@ Make use of TCP and QUIC and allow connection multiplexing / keep-alive for HTTP
 
 brotli, deflate, maybe an interface for arbitrary stream writers
 
-### SSL / TLS
-
-HTTPS or less secure deprecated methods for old applications / testing
-
 ### All versions of HTTP
 
 1.0, 1.1, 2.0, 3.0

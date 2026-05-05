@@ -18,7 +18,7 @@ impl HttpProcessor {
         todo!();
     }
 
-    pub fn handle_connection(buf: &[u8]) -> Option<HttpResponse> {
+    pub fn handle_connection(buf: &[u8], name: String) -> Option<HttpResponse> {
         if buf.is_empty() {
             return None;
         }
@@ -29,9 +29,9 @@ impl HttpProcessor {
             .take_while(|line| !line.is_empty())
             .collect();
 
-        let request: HttpRequest = HttpRequest::new(raw_request);
+        let request: HttpRequest = HttpRequest::new(raw_request, name.clone());
 
-        let response: HttpResponse = match CONFIG.get().unwrap().method_handlers.get(request.method) {
+        let response: HttpResponse = match CONFIG.get().unwrap().servers.get(&name).unwrap().method_handlers.get(request.method) {
             Some(call) => call(request),
             None => return None,
         };

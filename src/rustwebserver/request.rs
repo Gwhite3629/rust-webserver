@@ -8,6 +8,7 @@ use crate::URI;
 
 #[derive(Debug, Clone)]
 pub struct HttpRequest {
+    pub server_name: String,
     pub method: HttpMethod,
     pub target: URI,
     pub version: String,
@@ -16,10 +17,11 @@ pub struct HttpRequest {
 }
 
 impl HttpRequest {
-    pub fn new (request: Vec<String>) -> Self {
+    pub fn new (request: Vec<String>, name: String) -> Self {
         let form_s = Self::format_scheme(request[0].clone());
         //let form_h = Self::format_host(request[1].clone());
         return HttpRequest { 
+            server_name: name,
             method: HttpMethod::from_str(&form_s[0]).unwrap(),
             target: URI::new(&form_s[1]),
             version: form_s[2].clone(),
@@ -100,7 +102,7 @@ fn basic_request() {
     .take_while(|line| !line.is_empty())
     .collect();
 
-    let http_request: HttpRequest = HttpRequest::new(raw_request);
+    let http_request: HttpRequest = HttpRequest::new(raw_request, "default".to_string());
 
     assert_eq!(http_request.method.as_str(),"GET");
 
@@ -134,7 +136,7 @@ fn post_request() {
     .take_while(|line| !line.is_empty())
     .collect();
 
-    let mut http_request: HttpRequest = HttpRequest::new(raw_request);
+    let mut http_request: HttpRequest = HttpRequest::new(raw_request, "default".to_string());
 
     http_request._insert_content(RAW_POST_CONTENT.to_vec());
 
@@ -174,7 +176,7 @@ fn full_uri() {
     .take_while(|line| !line.is_empty())
     .collect();
 
-    let mut http_request: HttpRequest = HttpRequest::new(raw_request);
+    let mut http_request: HttpRequest = HttpRequest::new(raw_request, "default".to_string());
 
     http_request._insert_content(RAW_FULL_CONTENT.to_vec());
 
@@ -213,7 +215,7 @@ fn improper_uri() {
     .take_while(|line| !line.is_empty())
     .collect();
 
-    let mut http_request: HttpRequest = HttpRequest::new(raw_request);
+    let mut http_request: HttpRequest = HttpRequest::new(raw_request, "default".to_string());
 
     http_request._insert_content(RAW_BAD_CONTENT.to_vec());
 

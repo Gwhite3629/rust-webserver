@@ -2,10 +2,10 @@ use std::path::Path;
 
 use crate::CONFIG;
 
-pub fn is_valid_path(path: &Path) -> bool {
+pub fn is_valid_path(path: &Path, name: &String) -> bool {
     if !path.has_root() {return false};
 
-    let base = Path::new(&CONFIG.get().unwrap().path);
+    let base = Path::new(&CONFIG.get().unwrap().servers.get(name).unwrap().path);
     let full_path = base.join(path.strip_prefix("/").unwrap());
 
     if !full_path.is_file() {return false};

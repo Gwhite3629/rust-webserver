@@ -35,4 +35,5 @@ pub use handler::HttpFieldHandler;
 pub use handler::HttpFieldHandlerTable;
 pub use handler::RequestState;
 pub use config::HttpConfig;
+pub use config::GlobalConfig;
 pub use config::CONFIG;
