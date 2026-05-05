@@ -9,6 +9,7 @@ use crate::{HttpFieldHandlerTable, HttpMethodHandlerTable, Processor};
 
 pub static CONFIG: OnceLock<GlobalConfig> = OnceLock::new();
 
+#[derive(Clone, PartialEq)]
 pub enum Protocol {
     HTTP,
     HTTPS

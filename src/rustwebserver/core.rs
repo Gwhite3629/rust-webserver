@@ -37,8 +37,7 @@ use mio::{
 };
 
 use crate::{
-    HttpProcessor,
-    CONFIG
+    CONFIG, HttpProcessor, config::Protocol
 };
 
 pub const LISTENER: mio::Token = mio::Token(0);
@@ -50,29 +49,39 @@ pub enum Processor {
 
 pub struct Server {
     name: String,
+    protocol: Protocol,
     listener: TcpListener,
     connections: HashMap<mio::Token, OpenConnection>,
     next_id: usize,
-    tls_config: Arc<ServerConfig>,
+    tls_config: Option<Arc<ServerConfig>>,
     engine: Processor,
 }
 
 struct OpenConnection {
     name: String,
+    protocol: Protocol,
     socket: TcpStream,
     token: mio::Token,
     closing: bool,
     closed: bool,
-    tls_conn: ServerConnection,
+    tls_conn: Option<ServerConnection>,
     sent_http_response: bool,
     engine: Processor,
 }
 
 impl Server {
     pub fn new(name: String) -> Self {
-        let tls_config = tls_setup(name.clone());
 
-        let mode = CONFIG.get().unwrap().servers.get(&name).unwrap().protocol.to_processor();
+        let mode = CONFIG.get().unwrap().servers.get(&name).unwrap().protocol.clone();
+
+        let tls_config = match mode {
+            Protocol::HTTP => {
+                None
+            },
+            Protocol::HTTPS => {
+                Some(tls_setup(name.clone()))
+            }
+        };
 
         let listener = match TcpListener::bind(CONFIG.get().unwrap().servers.get(&name).unwrap().addr) {
             Ok(listener) => listener,
@@ -83,11 +92,12 @@ impl Server {
 
         Server { 
             name,
+            protocol: mode.clone(),
             listener, 
             connections: HashMap::new(), 
             next_id: 2,
             tls_config,
-            engine: mode
+            engine: mode.to_processor()
         }
     }
 
@@ -128,7 +138,14 @@ impl Server {
             match self.listener.accept() {
                 Ok((socket, _)) => {
                     println!("Accepting new connection");
-                    let tls_conn = ServerConnection::new(self.tls_config.clone()).unwrap();
+                    let tls_conn = match self.protocol {
+                        Protocol::HTTP => {
+                            None
+                        },
+                        Protocol::HTTPS => {
+                            Some(ServerConnection::new(self.tls_config.as_ref().unwrap().clone()).unwrap())
+                        },
+                    };
 
                     let token = Token(self.next_id);
                     self.next_id += 1;
@@ -161,9 +178,11 @@ impl Server {
 }
 
 impl OpenConnection {
-    pub fn new(name: String, socket: TcpStream, token: Token, tls_conn: ServerConnection, serv: Processor) -> Self {
+    pub fn new(name: String, socket: TcpStream, token: Token, tls_conn: Option<ServerConnection>, serv: Processor) -> Self {
+        let protocol = CONFIG.get().unwrap().servers.get(&name).unwrap().protocol.clone();
         Self {
             name,
+            protocol,
             socket,
             token,
             closing: false,
@@ -177,13 +196,27 @@ impl OpenConnection {
     fn ready(&mut self, reg: &Registry, event: &Event) {
         if event.is_readable() {
             println!("Reading event");
-            self.tls_read();
-            self.try_text_read();
+            match self.protocol {
+                Protocol::HTTP => {
+                    self.try_text_read();
+                },
+                Protocol::HTTPS => {
+                    self.tls_read();
+                    self.try_text_read_tls();
+                }
+            }
         }
 
         if event.is_writable() {
             println!("Writing event");
-            self.tls_write();
+            match self.protocol {
+                Protocol::HTTP => {
+                    
+                },
+                Protocol::HTTPS => {
+                    self.tls_write();
+                }
+            }
         }
 
         if self.closing {
@@ -199,7 +232,7 @@ impl OpenConnection {
     }
 
     fn tls_read(&mut self) {
-        match self.tls_conn.read_tls(&mut self.socket) {
+        match self.tls_conn.as_mut().unwrap().read_tls(&mut self.socket) {
             Err(error) => {
                 if let ErrorKind::WouldBlock = error.kind() {
                     println!("Would block");
@@ -219,7 +252,7 @@ impl OpenConnection {
             Ok(_) => {println!("TLS read successful");}
         };
 
-        if let Err(error) = self.tls_conn.process_new_packets() {
+        if let Err(error) = self.tls_conn.as_mut().unwrap().process_new_packets() {
             // Log stuff
             println!("Cannot process packet: {error:?}");
 
@@ -228,10 +261,10 @@ impl OpenConnection {
         }
     }
 
-    fn try_text_read(&mut self) {
-        if let Ok(io_state) = self.tls_conn.process_new_packets() {
+    fn try_text_read_tls(&mut self) {
+        if let Ok(io_state) = self.tls_conn.as_mut().unwrap().process_new_packets() {
             println!("got io_state");
-            if let Some(mut early_data) = self.tls_conn.early_data() {
+            if let Some(mut early_data) = self.tls_conn.as_mut().unwrap().early_data() {
                 let mut buf = Vec::new();
                 early_data.read_to_end(&mut buf).unwrap();
                 println!("Got early text");
@@ -250,15 +283,25 @@ impl OpenConnection {
                 println!("Processing plain test");
                 let mut buf = vec![0u8; io_state.plaintext_bytes_to_read()];
 
-                self.tls_conn.reader().read_exact(&mut buf).unwrap();
+                self.tls_conn.as_mut().unwrap().reader().read_exact(&mut buf).unwrap();
 
                 self.incoming_text(&buf);
             }
         }
     }
 
+
+    fn try_text_read(&mut self) {
+
+        let mut buf = Vec::new();
+
+        self.socket.read(&mut buf).unwrap();
+
+        self.incoming_text(&buf);
+    }
+
     fn tls_write(&mut self) {
-        let rc = self.tls_conn.write_tls(&mut self.socket);
+        let rc = self.tls_conn.as_mut().unwrap().write_tls(&mut self.socket);
         if rc.is_err() {
             // Log stuff
             println!("Write failed: {rc:?}");
@@ -269,23 +312,42 @@ impl OpenConnection {
     fn incoming_text(&mut self, buf: &[u8]) {
         let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
         println!("\tRAW TEXT: {print_str}");
-        let () = match self.engine {
+        match self.engine {
             Processor::HTTP => {
-                let res = match HttpProcessor::handle_connection(buf, self.name.clone()) {
-                    Some(res) => res,
-                    None => {
-                        self.tls_conn.send_close_notify();
+                match self.protocol {
+                    Protocol::HTTP => {
+                        let res = match HttpProcessor::handle_connection(buf, self.name.clone()) {
+                            Some(res) => res,
+                            None => return,
+                        };
+                        if !self.sent_http_response {
+                            self.socket.write_all(buf).unwrap();
+                            self.sent_http_response = true;
+                        }
+                        for chunk in HttpProcessor::to_chunks(res) {
+                            self.socket.write(&chunk).unwrap();
+                        }
+                        self.closing = true;
                         return;
-                    }
-                };
-                if !self.sent_http_response {
-                    self.tls_conn.writer().write_all(res.to_string().as_bytes()).unwrap();
-                    self.sent_http_response = true;
+                    },
+                    Protocol::HTTPS => {
+                        let res = match HttpProcessor::handle_connection(buf, self.name.clone()) {
+                            Some(res) => res,
+                            None => {
+                                self.tls_conn.as_mut().unwrap().send_close_notify();
+                                return;
+                            }
+                        };
+                        if !self.sent_http_response {
+                            self.tls_conn.as_mut().unwrap().writer().write_all(res.to_string().as_bytes()).unwrap();
+                            self.sent_http_response = true;
+                        }
+                        for chunk in HttpProcessor::to_chunks(res) {
+                            self.tls_conn.as_mut().unwrap().writer().write(&chunk).unwrap();
+                        }
+                        self.tls_conn.as_mut().unwrap().send_close_notify();
+                    },
                 }
-                for chunk in HttpProcessor::to_chunks(res) {
-                    self.tls_conn.writer().write(&chunk).unwrap();
-                }
-                self.tls_conn.send_close_notify();
             }
         };
     }
@@ -305,8 +367,14 @@ impl OpenConnection {
     }
 
     fn event_set(&self) -> Interest {
-        let rd = self.tls_conn.wants_read();
-        let wr = self.tls_conn.wants_write();
+        let (rd, wr) = match self.protocol {
+            Protocol::HTTP => {
+                (!self.closing, !self.sent_http_response)
+            },
+            Protocol::HTTPS => {
+                (self.tls_conn.as_ref().unwrap().wants_read(), self.tls_conn.as_ref().unwrap().wants_write())
+            },
+        };
 
         if rd && wr {
             Interest::READABLE | Interest::WRITABLE
@@ -329,20 +397,6 @@ impl OpenConnection {
 // server private key
 
 pub fn tls_setup(name: String) -> Arc<ServerConfig> {
-    /*
-    let root_certs = load_certs(&CONFIG.get().unwrap().root_certs);
-    let mut auth_roots = RootCertStore::empty();
-    for root in root_certs {
-        auth_roots.add(root).unwrap();
-    }
-    //let crl_list = load_crls(CONFIG.get().unwrap().crls.iter());
-
-    let auth = 
-    WebPkiClientVerifier::builder(auth_roots.into())
-            .with_crls(crl_list)
-            .build()
-            .unwrap();
-    */
 
     let certs = load_certs(&CONFIG.get().unwrap().servers.get(&name).unwrap().certs);
     let privkey = load_private_key(&CONFIG.get().unwrap().servers.get(&name).unwrap().privkey);
@@ -368,15 +422,3 @@ fn load_certs(filename: &Path) -> Vec<CertificateDer<'static>> {
 fn load_private_key(filename: &Path) -> PrivateKeyDer<'static> {
     PrivateKeyDer::from_pem_file(filename).expect("cannot read private key file")
 }
-
-/*
-fn load_crls(
-    filenames: impl Iterator<Item = impl AsRef<Path>>,
-) -> Vec<CertificateRevocationListDer<'static>> {
-    filenames
-        .map(|filename| {
-            CertificateRevocationListDer::from_pem_file(filename).expect("cannot read CRL file")
-        })
-        .collect()
-}
-        */
