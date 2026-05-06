@@ -8,6 +8,8 @@ pub fn is_valid_path(path: &Path, name: &String) -> bool {
     let base = Path::new(&CONFIG.get().unwrap().servers.get(name).unwrap().path);
     let full_path = base.join(path.strip_prefix("/").unwrap());
 
+    println!("Full Path: {full_path:#?}");
+
     if !full_path.is_file() {return false};
 
     let resolved_base = base.canonicalize().unwrap();
@@ -15,12 +17,46 @@ pub fn is_valid_path(path: &Path, name: &String) -> bool {
 
     if !resolved_path.starts_with(resolved_base) {return false};
 
+    println!("Final Path: {resolved_path:#?}");
+
     return true;
 }
 
-pub fn resolve_path(req_path: &Path) -> PathBuf {
-    let res_path = req_path.canonicalize().unwrap();
-    todo!();
+pub fn resolve_path(req_path: &Path, name: &String) -> PathBuf {
+    let mut res_path = req_path.to_path_buf();
+
+    let root_redirect = CONFIG.get().unwrap().servers.get(name).unwrap().root_redirect.clone();
+    let redirects = CONFIG.get().unwrap().servers.get(name).unwrap().redirects.clone();
+
+    match root_redirect {
+        Some(red) => {
+            res_path = red.redirect.unwrap()
+            .join(res_path
+                .strip_prefix("/").unwrap());
+        },
+        None => (),
+    }
+
+    println!("After root redirect: {res_path:#?}");
+
+    match redirects {
+        Some(reds) => {
+            for r in reds {
+                match r.redirect {
+                    Some(direct) => {
+                        res_path = PathBuf::from(res_path.to_string_lossy().replacen(
+                        r.req_path.to_str().unwrap(),
+                        direct.to_str().unwrap(),
+                        1));
+                    },
+                    None => (),
+                }
+            }
+        },
+        None => (),
+    }
+
+    res_path
 }
 
 pub fn get_mimetype(file: String) -> String {

@@ -111,13 +111,13 @@ impl HttpConfig {
         match potential_redirects {
             Some(red) => {
                 redirects = Some(Vec::new());
-                let root: Option<&Redirect> = red.iter().find(|&s| s.req_path == PathBuf::from("/"));
-                if  root.is_some() {
+                let root: Option<&Redirect> = red.iter().find(|s| s.req_path == PathBuf::from("/"));
+                if root.is_some() {
                     root_redirect = Some(root.unwrap().clone());
-                    for r in red {
-                        if r.req_path != PathBuf::from("/") {
-                            redirects.as_mut().expect("").push(r);
-                        }
+                }
+                for r in red {
+                    if r.req_path != PathBuf::from("/") {
+                        redirects.as_mut().expect("").push(r);
                     }
                 }
             },
@@ -167,16 +167,16 @@ impl HttpConfig {
                     let mut user = String::new();
                     let mut pass = String::new();
                     let mut inside: Vec<&str> = r.trim().lines().collect();
-                    p = PathBuf::from(inside[0].split_once("(").unwrap().0);
+                    p = PathBuf::from(inside[0].split_once("(").unwrap().0.trim());
                     inside.remove(0);
                     inside.pop();
-                    let pairs: Vec::<(&str, &str)> = inside.into_iter().map(|l| l.split_once(":").unwrap()).collect();
+                    let pairs: Vec::<(&str, &str)> = inside.into_iter().map(|l| l.trim().split_once(":").unwrap()).collect();
                     for (left, right) in pairs {
                         match left.to_uppercase().as_str() {
-                            "REDIRECT" => t = Some(PathBuf::from(right)),
-                            "AUTH" => a = Some(AuthType::from_str(right).unwrap()),
-                            "USER" => user = right.to_string(),
-                            "PASS" => pass = right.to_string(),
+                            "REDIRECT" => t = Some(PathBuf::from(right.trim())),
+                            "AUTH" => a = Some(AuthType::from_str(right.trim()).unwrap()),
+                            "USER" => user = right.trim().to_string(),
+                            "PASS" => pass = right.trim().to_string(),
                             _ => (),
                         }
                     }

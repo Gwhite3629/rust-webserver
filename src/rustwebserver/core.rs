@@ -329,8 +329,8 @@ impl OpenConnection {
     }
 
     fn incoming_text(&mut self, buf: &[u8]) {
-        let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
-        println!("RAW TEXT:\n{print_str}");
+        //let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
+        //println!("RAW TEXT:\n{print_str}");
         match self.engine {
             Processor::HTTP => {
                 match self.protocol {

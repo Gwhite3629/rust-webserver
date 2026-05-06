@@ -3,7 +3,7 @@ use std::path::Path;
 use std::io::{BufReader, Read};
 use std::io;
 
-use crate::file::is_valid_path;
+use crate::file::{is_valid_path, resolve_path};
 use crate::{DefaultFields, HttpFields, HttpRequest, HttpStatus};
 use crate::HttpResponse;
 
@@ -23,11 +23,17 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
     let mut file_contents = Vec::<u8>::new();
     let mut contents = Vec::<u8>::new();
 
-    let req_path = Path::new(req.target.path.as_str());
+    let mut req_path = Path::new(req.target.path.as_str());
     let base = Path::new(&CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().path);
     let path = Path::new(base);
     let final_path: String;
 
+    println!("Unresolved path: {req_path:#?}");
+
+    let req_pathbuf = resolve_path(&req_path, &req.server_name);
+    req_path = req_pathbuf.as_path();
+
+    println!("Resolved path: {req_path:#?}");
 
     if is_valid_path(&req_path, &req.server_name) {
         currentstatus = HttpStatus::OK;
