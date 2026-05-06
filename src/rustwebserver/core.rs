@@ -1,7 +1,9 @@
 use std::{
     collections::HashMap,
     io::{
-        BufReader, Error, ErrorKind, prelude::*
+        Error,
+        ErrorKind,
+        prelude::*
     },
     net::Shutdown,
     path::Path,
@@ -9,16 +11,13 @@ use std::{
 };
 
 use rustls::{
-    //RootCertStore,
     ServerConfig,
     ServerConnection,
     pki_types::{
         CertificateDer,
         pem::PemObject,
         PrivateKeyDer,
-        //CertificateRevocationListDer
     },
-    //server::WebPkiClientVerifier,
 };
 
 use mio::{
@@ -291,7 +290,7 @@ impl OpenConnection {
 
     fn try_text_read(&mut self) {
         let mut buf = vec![0u8; 4*1024];
-        let mut n = 0;
+        let n: usize;
         match self.socket.read(&mut buf) {
             Err(error) => {
                 if let ErrorKind::WouldBlock = error.kind() {
@@ -314,7 +313,6 @@ impl OpenConnection {
                 println!("RAW read successful");}
         };
 
-        //let n = self.socket.read(&mut buf).unwrap();
         println!("bytes: {n}");
         if n > 0 {
             self.incoming_text(&buf);
@@ -332,6 +330,7 @@ impl OpenConnection {
 
     fn incoming_text(&mut self, buf: &[u8]) {
         let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
+        println!("RAW TEXT:\n{print_str}");
         match self.engine {
             Processor::HTTP => {
                 match self.protocol {
@@ -389,7 +388,8 @@ impl OpenConnection {
     fn event_set(&self) -> Interest {
         let (rd, wr) = match self.protocol {
             Protocol::HTTP => {
-                (true, true)
+                // Need a better metric here
+                (true, false)
             },
             Protocol::HTTPS => {
                 (self.tls_conn.as_ref().unwrap().wants_read(), self.tls_conn.as_ref().unwrap().wants_write())
@@ -418,8 +418,15 @@ impl OpenConnection {
 
 pub fn tls_setup(name: String) -> Arc<ServerConfig> {
 
-    let certs = load_certs(&CONFIG.get().unwrap().servers.get(&name).unwrap().certs);
-    let privkey = load_private_key(&CONFIG.get().unwrap().servers.get(&name).unwrap().privkey);
+    let certs = load_certs(
+        &CONFIG.get().unwrap()
+    .servers.get(&name).unwrap()
+    .certs.as_ref().unwrap());
+    
+    let privkey = load_private_key(
+        &CONFIG.get().unwrap()
+        .servers.get(&name).unwrap()
+        .privkey.as_ref().unwrap());
 
     let config = ServerConfig::builder()
         .with_no_client_auth()

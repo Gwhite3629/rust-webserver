@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{PathBuf, Path};
 
 use crate::CONFIG;
 
@@ -16,6 +16,11 @@ pub fn is_valid_path(path: &Path, name: &String) -> bool {
     if !resolved_path.starts_with(resolved_base) {return false};
 
     return true;
+}
+
+pub fn resolve_path(req_path: &Path) -> PathBuf {
+    let res_path = req_path.canonicalize().unwrap();
+    todo!();
 }
 
 pub fn get_mimetype(file: String) -> String {

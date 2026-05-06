@@ -19,6 +19,8 @@ fn main() {
         Err(_) => panic!("Failed to setup config"),
     }
 
+    println!("{CONFIG:#?}");
+/*
     let names: Vec<&String> = CONFIG.get().unwrap().servers.keys().collect();
 
     let pool = ThreadPool::new(names.len());
@@ -29,5 +31,5 @@ fn main() {
             server.start();
         });
     }
-
+*/
 }

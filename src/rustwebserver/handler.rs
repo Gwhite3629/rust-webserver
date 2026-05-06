@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io;
+use std::fmt;
 
 use crate::HttpRequest;
 use crate::HttpResponse;
@@ -41,10 +42,24 @@ pub struct HttpMethodHandlerTable (
     HashMap<HttpMethod, &'static HttpMethodHandler>,
 );
 
+impl fmt::Debug for HttpMethodHandlerTable {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error>
+    {
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct HttpFieldHandlerTable (
     HashMap<CaseInsensitiveString, &'static HttpFieldHandler>,
 );
+
+impl fmt::Debug for HttpFieldHandlerTable {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error>
+    {
+        Ok(())
+    }
+}
 
 impl HttpMethodHandlerTable {
     pub fn new() -> Self {

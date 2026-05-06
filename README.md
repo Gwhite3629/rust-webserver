@@ -15,13 +15,21 @@ Rudimentary splitting of data into (small) chunks in order to demonstrate functi
 
 Very simple currently, define server root directory and host ip/port
 
+### Static content serving
+
+Provides HEAD, GET and TRACE methods
+
 ### Stateless design
 
 Attempt at REST conformity, though the ability to implement custom methods does not guarantee this
 
-### Multithreading
+### Async requests
 
-Each request is handled by a seperate thread allowing for multiple connections and quick re-loading of resources
+Leveraging the mio library for faster response time
+
+### Virtual hosting
+
+Allows multiple domains to be hosted and routed based on internal IP and ports
 
 ### HTTPS
 
@@ -65,9 +73,17 @@ Import the root_cert.pem to the browser
 
 ## TODO
 
+### Common features of other browsers
+
+CGI, Access Authentication, fastCGI, SSI, logging, caching, throttling / rate limiting, URL transformations
+
 ### Persistent / streamed connections
 
 Make use of TCP and QUIC and allow connection multiplexing / keep-alive for HTTP 1.1
+
+### TLS 1.3 and advanced features
+
+SNI, HTTP strict transport security
 
 ### More compression methods
 
@@ -75,11 +91,11 @@ brotli, deflate, maybe an interface for arbitrary stream writers
 
 ### All versions of HTTP
 
-1.0, 1.1, 2.0, 3.0
+1.1, 2.0, 3.0
 
 ### Other web/URI protocols
 
-ftp, irc, ssh
+ftp, irc, ssh, ftps
 
 ### Dynamic web programming languages
 
@@ -88,10 +104,6 @@ PHP, JavaScript
 ### Proxy capabilities
 
 Forward / Reverse abilities
-
-### More modular method handling
-
-Meta-programming config format that allows for definition of state-machines or pattern matching a series of header values
 
 ### Stress testing / benchmarking
 
