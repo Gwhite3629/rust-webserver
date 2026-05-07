@@ -122,7 +122,7 @@ impl Server {
             }
 
             for event in events.iter() {
-                println!("Got event");
+                //println!("Got event");
                 match event.token() {
                     LISTENER => self.accept_new_connection(poll.registry()).expect("Error accepting connection."),
                     _ => self.established_connection(poll.registry(), event),
@@ -194,7 +194,7 @@ impl OpenConnection {
 
     fn ready(&mut self, reg: &Registry, event: &Event) {
         if event.is_readable() {
-            println!("Reading event");
+            //println!("Reading event");
             match self.protocol {
                 Protocol::HTTP => {
                     self.try_text_read();
@@ -207,7 +207,7 @@ impl OpenConnection {
         }
 
         if event.is_writable() {
-            println!("Writing event");
+            //println!("Writing event");
             match self.protocol {
                 Protocol::HTTP => {
                     
@@ -219,7 +219,7 @@ impl OpenConnection {
         }
 
         if self.closing {
-            println!("Closing event");
+            //println!("Closing event");
             let _ = self
                 .socket
                 .shutdown(Shutdown::Both);
@@ -234,7 +234,7 @@ impl OpenConnection {
         match self.tls_conn.as_mut().unwrap().read_tls(&mut self.socket) {
             Err(error) => {
                 if let ErrorKind::WouldBlock = error.kind() {
-                    println!("Would block");
+                    //println!("Would block");
                     return;
                 }
                 
@@ -244,11 +244,13 @@ impl OpenConnection {
                 return;
             }
             Ok(0) => {
-                println!("Closing");
+                //println!("Closing");
                 self.closing = true;
                 return;
             }
-            Ok(_) => {println!("TLS read successful");}
+            Ok(_) => {
+                //println!("TLS read successful");
+            }
         };
 
         if let Err(error) = self.tls_conn.as_mut().unwrap().process_new_packets() {
@@ -262,24 +264,24 @@ impl OpenConnection {
 
     fn try_text_read_tls(&mut self) {
         if let Ok(io_state) = self.tls_conn.as_mut().unwrap().process_new_packets() {
-            println!("got io_state");
+            //println!("got io_state");
             if let Some(mut early_data) = self.tls_conn.as_mut().unwrap().early_data() {
                 let mut buf = Vec::new();
                 early_data.read_to_end(&mut buf).unwrap();
-                println!("Got early text");
+                //println!("Got early text");
 
                 if !buf.is_empty() {
-                    println!("Processing early text");
+                    //println!("Processing early text");
                     self.incoming_text(&buf);
                     return;
                 }
             }
 
-            let n = io_state.plaintext_bytes_to_read();
-            println!("bytes: {n}");
+            //let n = io_state.plaintext_bytes_to_read();
+            //println!("bytes: {n}");
 
             if io_state.plaintext_bytes_to_read() > 0 {
-                println!("Processing plain test");
+                //println!("Processing plain test");
                 let mut buf = vec![0u8; io_state.plaintext_bytes_to_read()];
 
                 self.tls_conn.as_mut().unwrap().reader().read_exact(&mut buf).unwrap();
@@ -296,7 +298,7 @@ impl OpenConnection {
         match self.socket.read(&mut buf) {
             Err(error) => {
                 if let ErrorKind::WouldBlock = error.kind() {
-                    println!("Would block");
+                    //println!("Would block");
                     return;
                 }
                 
@@ -306,16 +308,17 @@ impl OpenConnection {
                 return;
             }
             Ok(0) => {
-                println!("Closing");
+                //println!("Closing");
                 self.closing = true;
                 return;
             }
             Ok(n_read) => {
                 n = n_read;
-                println!("RAW read successful");}
+                //println!("RAW read successful");
+            }
         };
 
-        println!("bytes: {n}");
+        //println!("bytes: {n}");
         if n > 0 {
             self.incoming_text(&buf);
         }

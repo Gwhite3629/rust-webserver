@@ -39,14 +39,15 @@ impl NonceTracker {
     }
 
     pub fn insert(&mut self, name: String) {
-    let nonce = String::from_utf8(Aes256Gcm::generate_nonce(&mut OsRng).to_vec()).unwrap();
+        let nonce_crypt = Aes256Gcm::generate_nonce(&mut OsRng);
+        let nonce = format!("{:x}", nonce_crypt);
         self.map.insert(name, Nonce { val: nonce, n: 0 });
     }
 
-    pub fn get(&mut self, name: &String) -> Option<Nonce> {
-        let n = self.map.get_mut(name)?;
+    pub fn get(&mut self, name: &String) -> Option<&mut Nonce> {
+        let n = self.map.get_mut(name).unwrap();
         n.n = n.n + 1;
-        Some(n.clone())
+        Some(n)
     }
 
     pub fn remove(&mut self, name: String) {
@@ -58,7 +59,7 @@ pub struct UserAuth {
     pub user: String,
     pub pass: String,
     pub realm: String,
-    pub nonce: Option<Nonce>,
+    pub nonce: Option<String>,
 }
 
 pub enum UserAuthResult {
@@ -69,7 +70,7 @@ pub enum UserAuthResult {
 pub struct AuthData {
     pub method: HttpMethod,
     pub uri: URI,
-    pub nonce: Option<Nonce>,
+    pub nonce: Option<String>,
 }
 
 pub union RequestState<'req> {

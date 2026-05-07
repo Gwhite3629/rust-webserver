@@ -27,7 +27,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
     let mut req_path = Path::new(req.target.path.as_str());
     let base = Path::new(&CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().path);
     let path = Path::new(base);
-    let final_path: String;
+    let mut final_path: String;
 
     println!("Unresolved path: {req_path:#?}");
 
@@ -87,6 +87,16 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
         Some(a) => {
             match dval {
                 Some(d) => {
+                    println!("\tAuth: {}", d);
+                    println!("\taname: {}", a.name);
+                    let t = state.map.get(&a.name);
+                    if t.is_some() {
+                        println!("\tNonce counter: {}", t.unwrap().n);
+                        if t.unwrap().n >= 5 {
+                            state.map.remove(&a.name);
+                            dfun = None;
+                        }
+                    }
                     match dfun {
                         Some(func) => {
                             let realm = a.name.clone();
@@ -97,7 +107,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                 nonce: match d.contains("Basic") {
                                     true => None,
                                     false => {
-                                        state.get(&a.name)
+                                        Some(state.get(&a.name).unwrap().val.clone())
                                     },
                                 }
                             };
@@ -107,7 +117,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                 nonce: match d.contains("Basic") {
                                     true => None,
                                     false => {
-                                        state.get(&a.name)
+                                        Some(state.get(&a.name).unwrap().val.clone())
                                     },
                                 }
                             };
@@ -144,10 +154,19 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                             headers.insert("WWW-authenticate", format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name).as_str());
                         },
                         AuthType::DIGEST => {
+                            println!("aname: {}", a.name);
                             headers.insert("WWW-authenticate", 
                             format!("{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
-                            AuthType::as_str(&a.method),a.name,state.get(&a.name).unwrap().val).as_str());
-
+                            AuthType::as_str(&a.method),
+                            a.name,
+                            match state.get(&a.name) {
+                                Some(a) => a.val.clone(),
+                                None => {
+                                    state.insert(a.name.clone());
+                                    state.get(&a.name).unwrap().val.clone()
+                                },
+                            },) .as_str());
+                            println!("nonce: {}", state.get(&a.name).unwrap().val);
                         },
                     };
                     f = None;
@@ -155,6 +174,11 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
             }
         },
         None => (),
+    }
+
+    if currentstatus == HttpStatus::Forbidden {
+        final_path = path.join("403.html").to_str().unwrap().to_string();
+        f = Some(File::open(&final_path));
     }
 
     // Read file and write contents to buffer
@@ -202,7 +226,10 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                 currentstatus = HttpStatus::InternalServerError},
         }
     } else {
-        currentstatus = HttpStatus::BadRequest;
+        println!("{currentstatus:#?}");
+        if (currentstatus != HttpStatus::Unauthorized) & (currentstatus != HttpStatus::Forbidden) {
+            currentstatus = HttpStatus::BadRequest;
+        }
     }
 
     HttpResponse {

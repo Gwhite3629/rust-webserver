@@ -137,7 +137,11 @@ pub fn default_authorization<'req>(val: String, state: &'req mut RequestState) -
                         let ha2: String = format!("{:x}",md5::compute(unsafe{state.auth.method.as_str()}.to_owned() + ":" + &unsafe{state.auth.uri.to_string()}));
                         // Response = MD5(HA1:servernonce:nc:cnonce:qop:HA2)
                         let response: String = format!("{:x}",
-                            md5::compute(ha1 + ":" + a.nonce.clone().unwrap().val.as_str() + ":"
+                            md5::compute(ha1 + ":" + 
+                                match &a.nonce {
+                                    Some(v) => v,
+                                    None => "0",
+                                } + ":"
                                 + nc.as_str() + ":" + cnonce.as_str() + ":" + qop.as_str() + ":" + ha2.as_str()));
                         match response == client_response {
                             true => UserAuthResult::AUTHORIZED,
