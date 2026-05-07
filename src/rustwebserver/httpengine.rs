@@ -3,6 +3,7 @@ use std::io::BufRead;
 use crate::{
     HttpRequest,
     HttpResponse,
+    NonceTracker,
     CONFIG,
 };
 
@@ -18,7 +19,7 @@ impl HttpProcessor {
         todo!();
     }
 
-    pub fn handle_connection(buf: &[u8], name: String) -> Option<HttpResponse> {
+    pub fn handle_connection(buf: &[u8], name: String, state: &mut NonceTracker) -> Option<HttpResponse> {
         if buf.is_empty() {
             return None;
         }
@@ -32,7 +33,7 @@ impl HttpProcessor {
         let request: HttpRequest = HttpRequest::new(raw_request, name.clone());
 
         let response: HttpResponse = match CONFIG.get().unwrap().servers.get(&name).unwrap().method_handlers.get(request.method) {
-            Some(call) => call(request),
+            Some(call) => call(request, state),
             None => return None,
         };
 

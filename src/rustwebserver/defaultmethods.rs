@@ -3,7 +3,8 @@ use std::path::Path;
 use std::io::{BufReader, Read};
 
 use crate::file::{is_valid_path, resolve_path};
-use crate::{DefaultFields, HttpFields, HttpRequest, HttpStatus, Auth, AuthType, WriterType, DecoderType};
+use crate::handler::{UserAuth, UserAuthResult, AuthData};
+use crate::{AuthType, DefaultFields, HttpFields, HttpRequest, HttpStatus, NonceTracker, WriterType};
 use crate::HttpResponse;
 
 use crate::HttpFieldHandler;
@@ -15,7 +16,7 @@ use crate::RequestEffect;
 use crate::config::CONFIG;
 
 
-fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
+fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
 
     let mut currentstatus: HttpStatus;
     let mut headers = HttpFields::new();
@@ -24,7 +25,6 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
     let mut contents = Vec::<u8>::new();
 
     let mut req_path = Path::new(req.target.path.as_str());
-    let auth: Option<Auth>;
     let base = Path::new(&CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().path);
     let path = Path::new(base);
     let final_path: String;
@@ -45,20 +45,14 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
     }
 
     // File to be sent to client
-    let f = File::open(&final_path);
-
-    match auth {
-        Some(a) => {
-            currentstatus = HttpStatus::Unauthorized;
-            headers.insert("WWW-authenticate", format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name).as_str());
-
-        },
-        None => (),
-    }
+    let mut f = Some(File::open(&final_path));
 
     // Captured values used for compression writer dispatch
     let mut wfun: Option<Box<HttpFieldHandler>> = None;
     let mut wval: Option<String> = None;
+
+    let mut dfun: Option<Box<HttpFieldHandler>> = None;
+    let mut dval: Option<String> = None;
 
     // Loop over request headers and call custom methods
     for (key, val) in req.headers {
@@ -75,8 +69,10 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
                         wval = Some(val);
                         ()},
                     DefaultFields::AUTHORIZATION => {
-
-                    },
+                        println!("Parsing authorization:");
+                        dfun = Some(Box::new(fun));
+                        dval = Some(val);
+                        ()},
                     DefaultFields::CONNECTION => {
                         println!("Got connection header.");
                         ()},
@@ -87,9 +83,83 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
         };
     }
 
+    match auth {
+        Some(a) => {
+            match dval {
+                Some(d) => {
+                    match dfun {
+                        Some(func) => {
+                            let realm = a.name.clone();
+                            let userauth = UserAuth {
+                                user: a.user,
+                                pass: a.pass,
+                                realm,
+                                nonce: match d.contains("Basic") {
+                                    true => None,
+                                    false => {
+                                        state.get(&a.name)
+                                    },
+                                }
+                            };
+                            let userdata = AuthData {
+                                method: req.method,
+                                uri: req.target,
+                                nonce: match d.contains("Basic") {
+                                    true => None,
+                                    false => {
+                                        state.get(&a.name)
+                                    },
+                                }
+                            };
+                            match func(d, &mut RequestState{auth: &userdata}){
+                                RequestEffect::DECODER(dec) => {
+                                    match dec {
+                                        Some(mut call) => {
+                                            match call(&userauth) {
+                                                UserAuthResult::AUTHORIZED => {
+                                                    currentstatus = HttpStatus::OK;
+                                                }
+                                                UserAuthResult::UNAUTHORIZED => {
+                                                    currentstatus = HttpStatus::Forbidden;
+                                                    f = None;
+                                                }
+                                            }
+                                        },
+                                        None => (),
+                                    }
+                                },
+                                RequestEffect::WRITER(_) => (),
+                            }
+                        }
+                        None => {
+                            currentstatus = HttpStatus::InternalServerError;
+                            f = None;
+                        },
+                    }
+                },
+                None => {
+                    currentstatus = HttpStatus::Unauthorized;
+                    match a.method {
+                        AuthType::BASIC => {
+                            headers.insert("WWW-authenticate", format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name).as_str());
+                        },
+                        AuthType::DIGEST => {
+                            headers.insert("WWW-authenticate", 
+                            format!("{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
+                            AuthType::as_str(&a.method),a.name,state.get(&a.name).unwrap().val).as_str());
+
+                        },
+                    };
+                    f = None;
+                },
+            }
+        },
+        None => (),
+    }
+
     // Read file and write contents to buffer
-    if f.as_ref().is_ok() {
-        let mut buf_reader: BufReader<File> = BufReader::new(f.ok().unwrap());
+    if f.is_some() {
+        let mut buf_reader: BufReader<File> = BufReader::new(f.unwrap().ok().unwrap());
         let mut contents_container = RequestState{contents: &mut contents};
         match buf_reader.read_to_end(&mut file_contents) {
             Ok(_) => {
@@ -97,13 +167,13 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
                 let writer: WriterType;
                 writer = match wfun {
                     Some(wfun) => match wval {
-                        Some(wval) => {
-                            if wval.contains("gzip") {
+                        Some(val) => {
+                            if val.contains("gzip") {
                                headers.insert("content-encoding", "gzip");
                             } else {
                                 headers.insert("content-encoding", "identity");
                             };
-                            match wfun(wval, &mut contents_container) {
+                            match wfun(val, &mut contents_container) {
                                 RequestEffect::WRITER(w) => w,
                                 RequestEffect::DECODER(_) => None,
                             }
@@ -144,8 +214,8 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
 }
 
 
-pub fn handle_get<'req>(req: HttpRequest) -> HttpResponse {
-    let res = __internal_process(req);
+pub fn handle_get<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
+    let res = __internal_process(req, state);
 
     HttpResponse {
         version: res.version,
@@ -155,8 +225,8 @@ pub fn handle_get<'req>(req: HttpRequest) -> HttpResponse {
     }
 }
 
-pub fn handle_head(req: HttpRequest) -> HttpResponse {
-    let res = __internal_process(req);
+pub fn handle_head(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
+    let res = __internal_process(req, state);
 
     HttpResponse {
         version: res.version,
@@ -166,11 +236,11 @@ pub fn handle_head(req: HttpRequest) -> HttpResponse {
     }
 }
 
-pub fn handle_options(_req: HttpRequest) -> HttpResponse {
+pub fn handle_options(_req: HttpRequest, _state: &mut NonceTracker) -> HttpResponse {
     HttpResponse::new()
 }
 
-pub fn handle_trace(req: HttpRequest) -> HttpResponse {
+pub fn handle_trace(req: HttpRequest, _state: &mut NonceTracker) -> HttpResponse {
         
     let mut currentstatus = HttpStatus::OK;
     let mut headers = HttpFields::new();
@@ -213,13 +283,13 @@ pub fn handle_trace(req: HttpRequest) -> HttpResponse {
         let writer: WriterType;
         writer = match wfun {
             Some(wfun) => match wval {
-                Some(wval) => {
-                    if wval.contains("gzip") {
+                Some(val) => {
+                    if val.contains("gzip") {
                         headers.insert("content-encoding", "gzip");
                     } else {
                         headers.insert("content-encoding", "identity");
                     };
-                    match wfun(wval, &mut contents_container) {
+                    match wfun(val, &mut contents_container) {
                         RequestEffect::WRITER(w) => w,
                         RequestEffect::DECODER(_) => None,
                     }

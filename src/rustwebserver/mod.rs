@@ -37,6 +37,7 @@ pub use handler::RequestState;
 pub use handler::RequestEffect;
 pub use handler::WriterType;
 pub use handler::DecoderType;
+pub use handler::NonceTracker;
 pub use config::HttpConfig;
 pub use config::GlobalConfig;
 pub use config::Auth;

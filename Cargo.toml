@@ -11,9 +11,12 @@ path = "src/rustwebserver/mod.rs"
 name = "rustwebserver"
 
 [dependencies]
+aes-gcm = "0.10.3"
+base64 = "0.22.1"
 brotlic = "0.8.2"
 flate2 = "1.1.9"
 lazy_static = "1.5.0"
+md5 = "0.8.0"
 mio = { version = "1.2.0", features = ["net", "os-poll"] }
 regex = "1.12.3"
 rustls = "0.23.40"

@@ -5,6 +5,7 @@ use crate::HttpRequest;
 use crate::HttpResponse;
 use crate::HttpMethod;
 use crate::CaseInsensitiveString;
+use crate::URI;
 use crate::defaultfields::default_authorization;
 use crate::defaultfields::{
     default_accept,
@@ -20,16 +21,67 @@ use crate::defaultmethods::{
     handle_trace,
 };
 
+use aes_gcm::{aead::{AeadCore, OsRng}, Aes256Gcm};
+
+#[derive(Clone)]
+pub struct Nonce {
+    pub val: String,
+    pub n: usize,
+}
+
+pub struct NonceTracker {
+    pub map: HashMap<String, Nonce>,
+}
+
+impl NonceTracker {
+    pub fn new() -> Self {
+        NonceTracker { map: HashMap::new() }
+    }
+
+    pub fn insert(&mut self, name: String) {
+    let nonce = String::from_utf8(Aes256Gcm::generate_nonce(&mut OsRng).to_vec()).unwrap();
+        self.map.insert(name, Nonce { val: nonce, n: 0 });
+    }
+
+    pub fn get(&mut self, name: &String) -> Option<Nonce> {
+        let n = self.map.get_mut(name)?;
+        n.n = n.n + 1;
+        Some(n.clone())
+    }
+
+    pub fn remove(&mut self, name: String) {
+        self.map.remove(&name);
+    }
+}
+
+pub struct UserAuth {
+    pub user: String,
+    pub pass: String,
+    pub realm: String,
+    pub nonce: Option<Nonce>,
+}
+
+pub enum UserAuthResult {
+    UNAUTHORIZED,
+    AUTHORIZED
+}
+
+pub struct AuthData {
+    pub method: HttpMethod,
+    pub uri: URI,
+    pub nonce: Option<Nonce>,
+}
 
 pub union RequestState<'req> {
     pub path: &'req String,
     pub contents: &'req mut Vec<u8>,
+    pub auth: &'req AuthData,
 }
 
-type HttpMethodHandler = dyn Fn(HttpRequest) -> HttpResponse + Sync + Send;
+type HttpMethodHandler = dyn Fn(HttpRequest, &mut NonceTracker) -> HttpResponse + Sync + Send;
 
 pub type WriterType<'req> = Option<Box<dyn FnMut(&[u8]) -> Result<usize, std::io::Error> + Send + Sync + 'req>>;
-pub type DecoderType<'req> = Option<Box<dyn FnMut(String) -> Result<String, std::fmt::Error> + Send + Sync + 'req>>;
+pub type DecoderType<'req> = Option<Box<dyn FnMut(&UserAuth) -> UserAuthResult + Send + Sync + 'req>>;
 
 pub enum RequestEffect<'req> {
     WRITER(WriterType<'req>),

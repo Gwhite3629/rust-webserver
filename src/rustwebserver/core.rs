@@ -34,7 +34,7 @@ use mio::{
 };
 
 use crate::{
-    CONFIG, HttpProcessor, config::Protocol
+    CONFIG, HttpProcessor, config::Protocol, NonceTracker
 };
 
 pub const LISTENER: mio::Token = mio::Token(0);
@@ -64,6 +64,7 @@ struct OpenConnection {
     tls_conn: Option<ServerConnection>,
     sent_http_response: bool,
     engine: Processor,
+    noncehandler: NonceTracker,
 }
 
 impl Server {
@@ -94,7 +95,7 @@ impl Server {
             connections: HashMap::new(), 
             next_id: 2,
             tls_config,
-            engine: mode.to_processor()
+            engine: mode.to_processor(),
         }
     }
 
@@ -187,6 +188,7 @@ impl OpenConnection {
             tls_conn,
             sent_http_response: false,
             engine: serv,
+            noncehandler: NonceTracker::new()
         }
     }
 
@@ -335,7 +337,7 @@ impl OpenConnection {
             Processor::HTTP => {
                 match self.protocol {
                     Protocol::HTTP => {
-                        let res = match HttpProcessor::handle_connection(buf, self.name.clone()) {
+                        let res = match HttpProcessor::handle_connection(buf, self.name.clone(), &mut self.noncehandler) {
                             Some(res) => res,
                             None => return,
                         };
@@ -350,7 +352,7 @@ impl OpenConnection {
                         return;
                     },
                     Protocol::HTTPS => {
-                        let res = match HttpProcessor::handle_connection(buf, self.name.clone()) {
+                        let res = match HttpProcessor::handle_connection(buf, self.name.clone(), &mut self.noncehandler) {
                             Some(res) => res,
                             None => {
                                 self.tls_conn.as_mut().unwrap().send_close_notify();
