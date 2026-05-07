@@ -52,6 +52,7 @@ pub struct Server {
     next_id: usize,
     tls_config: Option<Arc<ServerConfig>>,
     engine: Processor,
+    noncehandler: NonceTracker,
 }
 
 struct OpenConnection {
@@ -64,7 +65,6 @@ struct OpenConnection {
     tls_conn: Option<ServerConnection>,
     sent_http_response: bool,
     engine: Processor,
-    noncehandler: NonceTracker,
 }
 
 impl Server {
@@ -96,6 +96,7 @@ impl Server {
             next_id: 2,
             tls_config,
             engine: mode.to_processor(),
+            noncehandler: NonceTracker::new(),
         }
     }
 
@@ -166,7 +167,7 @@ impl Server {
 
         if self.connections.contains_key(&token) {
             println!("Got established connection on {}", self.name);
-            self.connections.get_mut(&token).unwrap().ready(reg, event);
+            self.connections.get_mut(&token).unwrap().ready(reg, event, &mut self.noncehandler);
 
             if self.connections[&token].is_closed() {
                 self.connections.remove(&token);
@@ -188,20 +189,19 @@ impl OpenConnection {
             tls_conn,
             sent_http_response: false,
             engine: serv,
-            noncehandler: NonceTracker::new()
         }
     }
 
-    fn ready(&mut self, reg: &Registry, event: &Event) {
+    fn ready(&mut self, reg: &Registry, event: &Event, noncehandler: &mut NonceTracker) {
         if event.is_readable() {
             //println!("Reading event");
             match self.protocol {
                 Protocol::HTTP => {
-                    self.try_text_read();
+                    self.try_text_read(noncehandler);
                 },
                 Protocol::HTTPS => {
                     self.tls_read();
-                    self.try_text_read_tls();
+                    self.try_text_read_tls(noncehandler);
                 }
             }
         }
@@ -262,7 +262,7 @@ impl OpenConnection {
         }
     }
 
-    fn try_text_read_tls(&mut self) {
+    fn try_text_read_tls(&mut self, noncehandler: &mut NonceTracker) {
         if let Ok(io_state) = self.tls_conn.as_mut().unwrap().process_new_packets() {
             //println!("got io_state");
             if let Some(mut early_data) = self.tls_conn.as_mut().unwrap().early_data() {
@@ -272,7 +272,7 @@ impl OpenConnection {
 
                 if !buf.is_empty() {
                     //println!("Processing early text");
-                    self.incoming_text(&buf);
+                    self.incoming_text(&buf, noncehandler);
                     return;
                 }
             }
@@ -286,13 +286,13 @@ impl OpenConnection {
 
                 self.tls_conn.as_mut().unwrap().reader().read_exact(&mut buf).unwrap();
 
-                self.incoming_text(&buf);
+                self.incoming_text(&buf, noncehandler);
             }
         }
     }
 
 
-    fn try_text_read(&mut self) {
+    fn try_text_read(&mut self, noncehandler: &mut NonceTracker) {
         let mut buf = vec![0u8; 4*1024];
         let n: usize;
         match self.socket.read(&mut buf) {
@@ -320,7 +320,7 @@ impl OpenConnection {
 
         //println!("bytes: {n}");
         if n > 0 {
-            self.incoming_text(&buf);
+            self.incoming_text(&buf, noncehandler);
         }
     }
 
@@ -333,14 +333,14 @@ impl OpenConnection {
         }
     }
 
-    fn incoming_text(&mut self, buf: &[u8]) {
+    fn incoming_text(&mut self, buf: &[u8], noncehandler: &mut NonceTracker) {
         //let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
         //println!("RAW TEXT:\n{print_str}");
         match self.engine {
             Processor::HTTP => {
                 match self.protocol {
                     Protocol::HTTP => {
-                        let res = match HttpProcessor::handle_connection(buf, self.name.clone(), &mut self.noncehandler) {
+                        let res = match HttpProcessor::handle_connection(buf, self.name.clone(), noncehandler) {
                             Some(res) => res,
                             None => return,
                         };
@@ -355,7 +355,7 @@ impl OpenConnection {
                         return;
                     },
                     Protocol::HTTPS => {
-                        let res = match HttpProcessor::handle_connection(buf, self.name.clone(), &mut self.noncehandler) {
+                        let res = match HttpProcessor::handle_connection(buf, self.name.clone(), noncehandler) {
                             Some(res) => res,
                             None => {
                                 self.tls_conn.as_mut().unwrap().send_close_notify();

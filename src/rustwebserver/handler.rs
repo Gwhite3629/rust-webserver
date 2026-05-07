@@ -45,7 +45,7 @@ impl NonceTracker {
     }
 
     pub fn get(&mut self, name: &String) -> Option<&mut Nonce> {
-        let n = self.map.get_mut(name).unwrap();
+        let n = self.map.get_mut(name)?;
         n.n = n.n + 1;
         Some(n)
     }

@@ -15,6 +15,8 @@ use crate::RequestEffect;
 
 use crate::config::CONFIG;
 
+use colored::Colorize;
+
 
 fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
 
@@ -85,41 +87,32 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
 
     match auth {
         Some(a) => {
+            let t = state.map.get(&a.name);
+            if t.is_some() {
+                if t.unwrap().n >= 100 {
+                    state.map.remove(&a.name);
+                    dval = None;
+                }
+            }
             match dval {
                 Some(d) => {
-                    println!("\tAuth: {}", d);
-                    println!("\taname: {}", a.name);
-                    let t = state.map.get(&a.name);
-                    if t.is_some() {
-                        println!("\tNonce counter: {}", t.unwrap().n);
-                        if t.unwrap().n >= 5 {
-                            state.map.remove(&a.name);
-                            dfun = None;
-                        }
-                    }
                     match dfun {
                         Some(func) => {
                             let realm = a.name.clone();
+                            let nonce = match state.get(&a.name) {
+                                Some(n) => Some(n.val.clone()),
+                                None => None,
+                            };
                             let userauth = UserAuth {
                                 user: a.user,
                                 pass: a.pass,
                                 realm,
-                                nonce: match d.contains("Basic") {
-                                    true => None,
-                                    false => {
-                                        Some(state.get(&a.name).unwrap().val.clone())
-                                    },
-                                }
+                                nonce: nonce.clone(),
                             };
                             let userdata = AuthData {
                                 method: req.method,
                                 uri: req.target,
-                                nonce: match d.contains("Basic") {
-                                    true => None,
-                                    false => {
-                                        Some(state.get(&a.name).unwrap().val.clone())
-                                    },
-                                }
+                                nonce,
                             };
                             match func(d, &mut RequestState{auth: &userdata}){
                                 RequestEffect::DECODER(dec) => {
@@ -154,7 +147,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                             headers.insert("WWW-authenticate", format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name).as_str());
                         },
                         AuthType::DIGEST => {
-                            println!("aname: {}", a.name);
+                            println!("{}","Sending 401".green());
                             headers.insert("WWW-authenticate", 
                             format!("{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
                             AuthType::as_str(&a.method),
@@ -166,7 +159,6 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                     state.get(&a.name).unwrap().val.clone()
                                 },
                             },) .as_str());
-                            println!("nonce: {}", state.get(&a.name).unwrap().val);
                         },
                     };
                     f = None;
