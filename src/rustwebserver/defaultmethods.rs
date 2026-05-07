@@ -1,16 +1,16 @@
 use std::fs::File;
 use std::path::Path;
 use std::io::{BufReader, Read};
-use std::io;
 
 use crate::file::{is_valid_path, resolve_path};
-use crate::{DefaultFields, HttpFields, HttpRequest, HttpStatus};
+use crate::{DefaultFields, HttpFields, HttpRequest, HttpStatus, Auth, AuthType, WriterType, DecoderType};
 use crate::HttpResponse;
 
 use crate::HttpFieldHandler;
 
 use crate::file::get_mimetype;
 use crate::RequestState;
+use crate::RequestEffect;
 
 use crate::config::CONFIG;
 
@@ -24,13 +24,14 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
     let mut contents = Vec::<u8>::new();
 
     let mut req_path = Path::new(req.target.path.as_str());
+    let auth: Option<Auth>;
     let base = Path::new(&CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().path);
     let path = Path::new(base);
     let final_path: String;
 
     println!("Unresolved path: {req_path:#?}");
 
-    let req_pathbuf = resolve_path(&req_path, &req.server_name);
+    let (req_pathbuf, auth) = resolve_path(&req_path, &req.server_name);
     req_path = req_pathbuf.as_path();
 
     println!("Resolved path: {req_path:#?}");
@@ -45,6 +46,15 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
 
     // File to be sent to client
     let f = File::open(&final_path);
+
+    match auth {
+        Some(a) => {
+            currentstatus = HttpStatus::Unauthorized;
+            headers.insert("WWW-authenticate", format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name).as_str());
+
+        },
+        None => (),
+    }
 
     // Captured values used for compression writer dispatch
     let mut wfun: Option<Box<HttpFieldHandler>> = None;
@@ -64,6 +74,9 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
                         wfun = Some(Box::new(fun));
                         wval = Some(val);
                         ()},
+                    DefaultFields::AUTHORIZATION => {
+
+                    },
                     DefaultFields::CONNECTION => {
                         println!("Got connection header.");
                         ()},
@@ -81,7 +94,7 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
         match buf_reader.read_to_end(&mut file_contents) {
             Ok(_) => {
                 
-                let writer: Option<Box<dyn FnMut(&[u8]) -> io::Result<usize>>>;
+                let writer: WriterType;
                 writer = match wfun {
                     Some(wfun) => match wval {
                         Some(wval) => {
@@ -90,7 +103,10 @@ fn __internal_process<'req>(req: HttpRequest) -> HttpResponse {
                             } else {
                                 headers.insert("content-encoding", "identity");
                             };
-                            Some(wfun(wval, &mut contents_container))
+                            match wfun(wval, &mut contents_container) {
+                                RequestEffect::WRITER(w) => w,
+                                RequestEffect::DECODER(_) => None,
+                            }
                         },
                         None => None
                     },
@@ -194,7 +210,7 @@ pub fn handle_trace(req: HttpRequest) -> HttpResponse {
     {
         let mut contents_container = RequestState{contents: &mut contents};
 
-        let writer: Option<Box<dyn FnMut(&[u8]) -> io::Result<usize>>>;
+        let writer: WriterType;
         writer = match wfun {
             Some(wfun) => match wval {
                 Some(wval) => {
@@ -203,7 +219,10 @@ pub fn handle_trace(req: HttpRequest) -> HttpResponse {
                     } else {
                         headers.insert("content-encoding", "identity");
                     };
-                    Some(wfun(wval, &mut contents_container))
+                    match wfun(wval, &mut contents_container) {
+                        RequestEffect::WRITER(w) => w,
+                        RequestEffect::DECODER(_) => None,
+                    }
                 },
                 None => None
             },

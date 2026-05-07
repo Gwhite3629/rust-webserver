@@ -1,5 +1,7 @@
 use std::path::{PathBuf, Path};
 
+use crate::Auth;
+
 use crate::CONFIG;
 
 pub fn is_valid_path(path: &Path, name: &String) -> bool {
@@ -22,8 +24,11 @@ pub fn is_valid_path(path: &Path, name: &String) -> bool {
     return true;
 }
 
-pub fn resolve_path(req_path: &Path, name: &String) -> PathBuf {
+pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
     let mut res_path = req_path.to_path_buf();
+
+    let mut set_auth = false;
+    let mut auth: Option<Auth> = None;
 
     let root_redirect = CONFIG.get().unwrap().servers.get(name).unwrap().root_redirect.clone();
     let redirects = CONFIG.get().unwrap().servers.get(name).unwrap().redirects.clone();
@@ -33,6 +38,13 @@ pub fn resolve_path(req_path: &Path, name: &String) -> PathBuf {
             res_path = red.redirect.unwrap()
             .join(res_path
                 .strip_prefix("/").unwrap());
+            match red.auth {
+                Some(a) => {
+                    set_auth = true;
+                    auth = Some(a);
+                },
+                None => auth = None,
+            };
         },
         None => (),
     }
@@ -48,6 +60,16 @@ pub fn resolve_path(req_path: &Path, name: &String) -> PathBuf {
                         r.req_path.to_str().unwrap(),
                         direct.to_str().unwrap(),
                         1));
+
+                        if set_auth == false {
+                            match r.auth {
+                                Some(a) => {
+                                    set_auth = true;
+                                    auth = Some(a);
+                                },
+                                None => auth = None,
+                            };
+                        }
                     },
                     None => (),
                 }
@@ -56,7 +78,7 @@ pub fn resolve_path(req_path: &Path, name: &String) -> PathBuf {
         None => (),
     }
 
-    res_path
+    (res_path, auth)
 }
 
 pub fn get_mimetype(file: String) -> String {

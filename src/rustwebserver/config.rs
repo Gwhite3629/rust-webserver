@@ -71,6 +71,7 @@ impl AuthType {
 #[derive(PartialEq, Clone, Debug)]
 pub struct Auth {
     pub method: AuthType,
+    pub name: String,
     pub user: String,
     pub pass: String,
 }
@@ -164,6 +165,7 @@ impl HttpConfig {
                     let p: PathBuf;
                     let mut t: Option<PathBuf> = None;
                     let mut a: Option<AuthType> = None;
+                    let mut name = String::new();
                     let mut user = String::new();
                     let mut pass = String::new();
                     let mut inside: Vec<&str> = r.trim().lines().collect();
@@ -175,6 +177,7 @@ impl HttpConfig {
                         match left.to_uppercase().as_str() {
                             "REDIRECT" => t = Some(PathBuf::from(right.trim())),
                             "AUTH" => a = Some(AuthType::from_str(right.trim()).unwrap()),
+                            "NAME" => name = right.trim().to_string(),
                             "USER" => user = right.trim().to_string(),
                             "PASS" => pass = right.trim().to_string(),
                             _ => (),
@@ -187,6 +190,7 @@ impl HttpConfig {
                         auth: match a {
                             Some(a) => Some(Auth {
                                 method: a,
+                                name,
                                 user,
                                 pass,
                             }),

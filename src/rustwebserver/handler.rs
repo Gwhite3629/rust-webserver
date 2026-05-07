@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use std::io;
 use std::fmt;
 
 use crate::HttpRequest;
 use crate::HttpResponse;
 use crate::HttpMethod;
 use crate::CaseInsensitiveString;
+use crate::defaultfields::default_authorization;
 use crate::defaultfields::{
     default_accept,
     default_accept_encoding,
@@ -26,16 +26,18 @@ pub union RequestState<'req> {
     pub contents: &'req mut Vec<u8>,
 }
 
-/*
-pub struct RequestEffect {
-    pub writer: Box<dyn FnMut(&[u8]) -> io::Result<usize>>,
-}
-*/
-
 type HttpMethodHandler = dyn Fn(HttpRequest) -> HttpResponse + Sync + Send;
 
+pub type WriterType<'req> = Option<Box<dyn FnMut(&[u8]) -> Result<usize, std::io::Error> + Send + Sync + 'req>>;
+pub type DecoderType<'req> = Option<Box<dyn FnMut(String) -> Result<String, std::fmt::Error> + Send + Sync + 'req>>;
+
+pub enum RequestEffect<'req> {
+    WRITER(WriterType<'req>),
+    DECODER(DecoderType<'req>),
+}
+
 // Take a single value from a header field and return a closure that updates the control flow of the current method
-pub type HttpFieldHandler = dyn for<'req> Fn(String, &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> + Sync + Send;
+pub type HttpFieldHandler = dyn for<'req> Fn(String, &'req mut RequestState) -> RequestEffect<'req> + Send + Sync;
 
 #[derive(Clone)]
 pub struct HttpMethodHandlerTable (
@@ -87,7 +89,8 @@ impl HttpMethodHandlerTable {
     }
 }
 
-impl HttpFieldHandlerTable {
+impl HttpFieldHandlerTable
+{
     pub fn new() -> Self {
         HttpFieldHandlerTable{ 0: HashMap::new() }
     }
@@ -108,6 +111,7 @@ impl HttpFieldHandlerTable {
     pub fn use_defaults(&mut self) {
         self.insert(CaseInsensitiveString::from_str("accept"), &default_accept);
         self.insert(CaseInsensitiveString::from_str("accept-encoding"), &default_accept_encoding);
+        self.insert(CaseInsensitiveString::from_str("authorization"), &default_authorization);
         self.insert(CaseInsensitiveString::from_str("content"), &default_connection);
         self.insert(CaseInsensitiveString::from_str("content-length"), &default_content_length);
     }

@@ -31,6 +31,10 @@ Leveraging the mio library for faster response time
 
 Allows multiple domains to be hosted and routed based on internal IP and ports
 
+### URL Redirection
+
+Config allows URL resources to be aliased and protected as realms with basic or digest authentication. Nested authentication is undefined behavior but should short circuit to the lowest (closest to root) level.
+
 ### HTTPS
 
 How to make a key and identity file:
@@ -75,7 +79,7 @@ Import the root_cert.pem to the browser
 
 ### Common features of other browsers
 
-CGI, Access Authentication, fastCGI, SSI, logging, caching, throttling / rate limiting, URL transformations
+CGI, Access Authentication, fastCGI, SSI, logging, caching, throttling / rate limiting
 
 ### Persistent / streamed connections
 

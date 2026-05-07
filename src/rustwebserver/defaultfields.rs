@@ -1,9 +1,9 @@
 use std::io::Write;
-use std::io;
 use std::io::BufWriter;
 
 use crate::CaseInsensitiveString;
 use crate::RequestState;
+use crate::RequestEffect;
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -13,6 +13,7 @@ use flate2::Compression;
 pub enum DefaultFields {
     ACCEPT,
     ACCEPTENCODING,
+    AUTHORIZATION,
     CONNECTION,
     CONTENTLENGTH,
 }
@@ -23,6 +24,8 @@ impl DefaultFields {
             return Some(DefaultFields::ACCEPT);
         } else if CaseInsensitiveString::from_str("accept-encoding") == field {
             return Some(DefaultFields::ACCEPTENCODING);
+        } else if CaseInsensitiveString::from_str("authorization") == field {
+            return Some(DefaultFields::AUTHORIZATION);
         } else if CaseInsensitiveString::from_str("connection") == field {
             return Some(DefaultFields::CONNECTION);
         } else if CaseInsensitiveString::from_str("content-length") == field {
@@ -36,6 +39,7 @@ impl DefaultFields {
         match self {
             DefaultFields::ACCEPT => CaseInsensitiveString("accept".to_string()),
             DefaultFields::ACCEPTENCODING => CaseInsensitiveString("accept-encoding".to_string()),
+            DefaultFields::AUTHORIZATION => CaseInsensitiveString("authorization".to_string()),
             DefaultFields::CONNECTION=> CaseInsensitiveString("connection".to_string()),
             DefaultFields::CONTENTLENGTH => CaseInsensitiveString("content-length".to_string()),
         }
@@ -44,27 +48,53 @@ impl DefaultFields {
 
 // type HttpFieldHandler = dyn Fn(String, RequestState) -> RequestEffect + Sync + Send;
 
-pub fn default_accept<'req>(_val: String, _state: &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> {
+pub fn default_accept<'req>(_val: String, _state: &'req mut RequestState) -> RequestEffect<'req>
+{
     todo!()
 }
 
-pub fn default_accept_encoding<'req>(val: String, state: &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> {
-    
+pub fn default_accept_encoding<'req>(val: String, state: &'req mut RequestState) -> RequestEffect<'req>
+{    
     if val.contains("gzip") {
         let mut gz = GzEncoder::new(unsafe {&mut state.contents}, Compression::default());
         println!("Using gzip encoding");
-        return Box::new(move |f| gz.write(f));
+        return RequestEffect::WRITER(
+            Some(
+                Box::new(
+                    move |f| gz.write(f.as_ref())
+                )
+            )
+        );
     } else {
         let mut bf = BufWriter::new(unsafe {&mut state.contents});
         println!("Using identity encoding");
-        return Box::new(move |f| bf.write(f));
+        return RequestEffect::WRITER(
+            Some(
+                Box::new(
+                    move |f| bf.write(f.as_ref())
+                )
+            )
+        );
     };
 }
 
-pub fn default_connection<'req>(_val: String, _state: &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> {
+pub fn default_authorization<'req>(val: String, state: &'req mut RequestState) -> RequestEffect<'req>
+{
+    if val.contains("Basic") {
+        todo!();
+    } else if val.contains("Digest") {
+        todo!();
+    } else {
+        todo!();
+    }
+}
+
+pub fn default_connection<'req>(_val: String, _state: &'req mut RequestState) -> RequestEffect<'req>
+{
     todo!()
 }
 
-pub fn default_content_length<'req>(_val: String, _state: &'req mut RequestState) -> Box<dyn FnMut(&[u8]) -> io::Result<usize> + 'req> {
+pub fn default_content_length<'req>(_val: String, _state: &'req mut RequestState) -> RequestEffect<'req>
+{
     todo!()
 }
