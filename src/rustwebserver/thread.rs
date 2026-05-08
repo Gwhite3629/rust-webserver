@@ -1,11 +1,9 @@
-
-
 use std::{
     sync::{Arc, Mutex, mpsc},
     thread,
 };
 
-pub struct ThreadPool{
+pub struct ThreadPool {
     workers: Vec<Worker>,
     sender: Option<mpsc::Sender<Job>>,
 }
@@ -33,7 +31,7 @@ impl ThreadPool {
     }
 
     pub fn execute<F>(&self, _f: F)
-    where 
+    where
         F: FnOnce() + Send + 'static,
     {
         let job = Box::new(_f);
@@ -41,7 +39,7 @@ impl ThreadPool {
         match self.sender.as_ref() {
             Some(send_ref) => match send_ref.send(job) {
                 Ok(result) => result,
-            Err(error) => panic!("Error sending job: {error:?}"),
+                Err(error) => panic!("Error sending job: {error:?}"),
             },
             None => println!("Failed to resolve sender ref"),
         };

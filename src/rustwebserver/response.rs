@@ -18,7 +18,13 @@ impl HttpResponse {
     }
 
     pub fn to_string(&self) -> String {
-        let status: String = String::new() + self.version.as_str() + " " + (self.status as u16).to_string().as_str() + " " + self.status.to_string() + "\r\n";
+        let status: String = String::new()
+            + self.version.as_str()
+            + " "
+            + (self.status as u16).to_string().as_str()
+            + " "
+            + self.status.to_string()
+            + "\r\n";
         let mut headers: String = String::new();
         for (k, v) in self.headers.clone() {
             headers = headers + &k + ": " + v.as_str() + "\r\n";

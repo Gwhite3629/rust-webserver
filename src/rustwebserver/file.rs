@@ -1,23 +1,29 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use crate::Auth;
 
 use crate::CONFIG;
 
 pub fn is_valid_path(path: &Path, name: &String) -> bool {
-    if !path.has_root() {return false};
+    if !path.has_root() {
+        return false;
+    };
 
     let base = Path::new(&CONFIG.get().unwrap().servers.get(name).unwrap().path);
     let full_path = base.join(path.strip_prefix("/").unwrap());
 
     println!("Full Path: {full_path:#?}");
 
-    if !full_path.is_file() {return false};
+    if !full_path.is_file() {
+        return false;
+    };
 
     let resolved_base = base.canonicalize().unwrap();
     let resolved_path = full_path.canonicalize().unwrap();
 
-    if !resolved_path.starts_with(resolved_base) {return false};
+    if !resolved_path.starts_with(resolved_base) {
+        return false;
+    };
 
     println!("Final Path: {resolved_path:#?}");
 
@@ -30,22 +36,37 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
     let mut set_auth = false;
     let mut auth: Option<Auth> = None;
 
-    let root_redirect = CONFIG.get().unwrap().servers.get(name).unwrap().root_redirect.clone();
-    let redirects = CONFIG.get().unwrap().servers.get(name).unwrap().redirects.clone();
+    let root_redirect = CONFIG
+        .get()
+        .unwrap()
+        .servers
+        .get(name)
+        .unwrap()
+        .root_redirect
+        .clone();
+    let redirects = CONFIG
+        .get()
+        .unwrap()
+        .servers
+        .get(name)
+        .unwrap()
+        .redirects
+        .clone();
 
     match root_redirect {
         Some(red) => {
-            res_path = red.redirect.unwrap()
-            .join(res_path
-                .strip_prefix("/").unwrap());
+            res_path = red
+                .redirect
+                .unwrap()
+                .join(res_path.strip_prefix("/").unwrap());
             match red.auth {
                 Some(a) => {
                     set_auth = true;
                     auth = Some(a);
-                },
+                }
                 None => auth = None,
             };
-        },
+        }
         None => (),
     }
 
@@ -57,25 +78,30 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
                 match r.redirect {
                     Some(direct) => {
                         res_path = PathBuf::from(res_path.to_string_lossy().replacen(
-                        r.req_path.to_str().unwrap(),
-                        direct.to_str().unwrap(),
-                        1));
-                    },
+                            r.req_path.to_str().unwrap(),
+                            direct.to_str().unwrap(),
+                            1,
+                        ));
+                    }
                     None => (),
                 }
                 if set_auth == false {
-                    if res_path.to_string_lossy().to_string().contains(r.req_path.to_str().unwrap()) {
+                    if res_path
+                        .to_string_lossy()
+                        .to_string()
+                        .contains(r.req_path.to_str().unwrap())
+                    {
                         match r.auth {
                             Some(a) => {
                                 set_auth = true;
                                 auth = Some(a);
-                            },
+                            }
                             None => auth = None,
                         };
                     }
                 }
             }
-        },
+        }
         None => (),
     }
 
@@ -83,7 +109,6 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
 }
 
 pub fn get_mimetype(file: String) -> String {
-
     let e = Path::new(file.as_str())
         .extension()
         .map(|ext| ext.to_str().unwrap_or(""))

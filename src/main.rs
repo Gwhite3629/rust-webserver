@@ -1,13 +1,6 @@
-
-use rustwebserver::{
-    ThreadPool,
-    Server,
-    GlobalConfig,
-    CONFIG,
-};
+use rustwebserver::{CONFIG, GlobalConfig, Server, ThreadPool};
 
 fn main() {
-
     let args: Vec<String> = std::env::args().collect::<Vec<String>>();
     if args.len() == 1 {
         println!("usage: {} <config>", args[0]);
@@ -31,5 +24,4 @@ fn main() {
             server.start();
         });
     }
-
 }

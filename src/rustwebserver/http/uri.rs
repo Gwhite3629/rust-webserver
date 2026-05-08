@@ -1,15 +1,14 @@
 use core::fmt::Display;
-use regex::Regex;
 use lazy_static::lazy_static;
+use regex::Regex;
 
 lazy_static! {
         static ref URI_REGEX: Regex = Regex::new(
             r"^((?<scheme>[^:/?#]+):)?(//(?<authority>[^/?#]*))?(?<path>[^?#]*)(\?(?<query>[^#]*))?(#(?<fragment>.*))?$"
         ).unwrap();
-    } 
+    }
 
 // URI defined by RFC3986
-
 
 // URI         = scheme ":" hier-part [ "?" query ] [ "#" fragment ]
 //
@@ -29,7 +28,7 @@ pub struct URI {
 
 // scheme      = ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) (RFC 3986)
 #[derive(Debug, PartialEq, Clone)]
-pub struct Scheme (String);
+pub struct Scheme(String);
 
 impl Scheme {
     pub fn new(s: &String) -> Self {
@@ -47,7 +46,7 @@ impl Scheme {
 
 // authority   = [ userinfo "@" ] host [ ":" port ] (RFC 3986)
 // userinfo    = *( unreserved / pct-encoded / sub-delims / ":" )
-// host        = IP-literal / IPv4address / reg-name 
+// host        = IP-literal / IPv4address / reg-name
 // port        = *DIGIT
 
 #[derive(Debug, Clone)]
@@ -60,9 +59,12 @@ pub struct Authority {
 impl Authority {
     pub fn new(s: &String) -> Self {
         if s.is_empty() {
-            Authority {userinfo: String::new(),host: String::new(),port: 0}
+            Authority {
+                userinfo: String::new(),
+                host: String::new(),
+                port: 0,
+            }
         } else {
-
             let uinfore: Regex = Regex::new(r"((?<userinfo>[^/?#@]*)@)?").unwrap();
             let portre: Regex = Regex::new(r"[^?#/@:](:(?<port>[0-9]+))$").unwrap();
 
@@ -78,7 +80,7 @@ impl Authority {
 
             let mod_s = if !infostring.is_empty() {
                 infostring.push('@');
-                s.replace(infostring.as_str(),"")
+                s.replace(infostring.as_str(), "")
             } else {
                 s.clone()
             };
@@ -100,13 +102,17 @@ impl Authority {
                 mod_s.clone()
             };
 
-            Authority { userinfo: userinfo, host: final_s.clone(), port: port }
+            Authority {
+                userinfo: userinfo,
+                host: final_s.clone(),
+                port: port,
+            }
         }
-    } 
+    }
 }
 
-// host        = IP-literal / IPv4address / reg-name 
-// 
+// host        = IP-literal / IPv4address / reg-name
+//
 // IP-literal = "[" ( IPv6address / IPvFuture  ) "]"
 //  ?<IP-literal>(
 //      \[
@@ -144,7 +150,6 @@ impl Authority {
 //
 // reg-name    = *( unreserved / pct-encoded / sub-delims )
 
-
 // path          = path-abempty    ; begins with "/" or is empty
 //                    / path-absolute   ; begins with "/" but not "//"
 //                    / path-noscheme   ; begins with a non-colon segment
@@ -165,7 +170,7 @@ impl Authority {
 //      pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Path (String);
+pub struct Path(String);
 
 impl Path {
     pub fn new(s: &String) -> Self {
@@ -183,7 +188,7 @@ impl Path {
 
 // query       = *( pchar / "/" / "?" )
 #[derive(Debug, PartialEq, Clone)]
-pub struct Query (String);
+pub struct Query(String);
 
 impl Query {
     pub fn new(s: &String) -> Self {
@@ -201,7 +206,7 @@ impl Query {
 
 // fragment    = *( pchar / "/" / "?" )
 #[derive(Debug, PartialEq, Clone)]
-pub struct Fragment (String);
+pub struct Fragment(String);
 
 impl Fragment {
     pub fn new(s: &String) -> Self {
@@ -218,67 +223,60 @@ impl Fragment {
 }
 
 macro_rules! urimatch {
-    ($s:expr, $m:expr, $c:expr) => {
-        {
+    ($s:expr, $m:expr, $c:expr) => {{
         let s = match $c {
-            Some(res) =>  match res.name($m) {
+            Some(res) => match res.name($m) {
                 Some(string) => string.as_str().to_string(),
                 None => String::new(),
             },
             None => String::new(),
         };
         s
-        }
-    };
+    }};
 }
 
 impl URI {
     pub fn new(s: &String) -> Self {
-        let cap = URI_REGEX.captures(s);      
+        let cap = URI_REGEX.captures(s);
 
-        return URI { 
+        return URI {
             scheme: Scheme::new(&urimatch!(s, "scheme", &cap)),
             authority: Authority::new(&urimatch!(s, "authority", &cap)),
             path: Path::new(&urimatch!(s, "path", &cap)),
             query: Query::new(&urimatch!(s, "query", &cap)),
             fragment: Fragment::new(&urimatch!(s, "fragment", &cap)),
-        }
+        };
     }
 
     pub fn to_string(&self) -> String {
-        let scheme: String =
-            if self.scheme.0.is_empty() {
-                "".to_string()
-            } else {
-                self.scheme.0.clone() + "://"
-            };
-            
-        let authority: String = 
-            if self.authority.userinfo.is_empty() {
-                "".to_string()
-            } else {
-                self.authority.userinfo.clone() + "@"
-            } + 
-            if self.authority.host.is_empty() {
-                ""
-            } else {
-                self.authority.host.as_str()
-            };
-        let port: String = 
-            if self.authority.port == 0 {
-                "".to_string()
-            } else {
-                ":".to_string() + self.authority.port.to_string().as_str()
-            };
-        let path: String = self.path.0.clone();
-        let query: String = 
-            if self.query.0.is_empty() {
-                "".to_string()
-            } else {
-                "?".to_string() + self.query.0.as_str()
-            };
+        let scheme: String = if self.scheme.0.is_empty() {
+            "".to_string()
+        } else {
+            self.scheme.0.clone() + "://"
+        };
 
-        let ret: String = format!("{}{}{}{}{}",scheme,authority,port,path,query);
+        let authority: String = if self.authority.userinfo.is_empty() {
+            "".to_string()
+        } else {
+            self.authority.userinfo.clone() + "@"
+        } + if self.authority.host.is_empty() {
+            ""
+        } else {
+            self.authority.host.as_str()
+        };
+        let port: String = if self.authority.port == 0 {
+            "".to_string()
+        } else {
+            ":".to_string() + self.authority.port.to_string().as_str()
+        };
+        let path: String = self.path.0.clone();
+        let query: String = if self.query.0.is_empty() {
+            "".to_string()
+        } else {
+            "?".to_string() + self.query.0.as_str()
+        };
+
+        let ret: String = format!("{}{}{}{}{}", scheme, authority, port, path, query);
 
         ret
     }
@@ -286,7 +284,7 @@ impl URI {
 
 impl Display for URI {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!{f,
+        write! {f,
             "\tScheme: {}\n
 \tAuthority:\n
 \t\tUserInfo: {}\n
@@ -304,4 +302,3 @@ impl Display for URI {
         }
     }
 }
-

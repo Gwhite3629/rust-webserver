@@ -1,4 +1,4 @@
-use std::collections::{hash_map, HashMap};
+use std::collections::{HashMap, hash_map};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 use std::ops::Deref;
@@ -7,7 +7,7 @@ use std::ops::Deref;
 pub struct CaseInsensitiveString(pub String);
 
 impl PartialEq for CaseInsensitiveString {
-    fn eq (&self, other: &Self) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.0.eq_ignore_ascii_case(&other.0)
     }
 }
@@ -47,20 +47,18 @@ pub struct HttpFields {
 
 impl HttpFields {
     pub fn new() -> Self {
-        HttpFields { fields: HashMap::new() }
+        HttpFields {
+            fields: HashMap::new(),
+        }
     }
 
     pub fn insert(&mut self, key: &str, value: &str) {
-        self.fields.insert(
-            CaseInsensitiveString(key.to_string()),
-            value.to_string()
-        );
+        self.fields
+            .insert(CaseInsensitiveString(key.to_string()), value.to_string());
     }
 
     pub fn get(&self, key: &str) -> Option<&String> {
-        self.fields.get(
-            &CaseInsensitiveString(key.to_string())
-        )
+        self.fields.get(&CaseInsensitiveString(key.to_string()))
     }
 
     pub fn iter(&self) -> std::collections::hash_map::Iter<'_, CaseInsensitiveString, String> {
@@ -91,8 +89,8 @@ impl IntoIterator for HttpFields {
 
 impl Display for HttpFields {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (k,v) in self.iter() {
-            write!(f,"{}: {}\r\n", k, v)?
+        for (k, v) in self.iter() {
+            write!(f, "{}: {}\r\n", k, v)?
         }
         Ok(())
     }

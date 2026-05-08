@@ -91,7 +91,6 @@ pub enum HttpStatus {
     TemporarilyDisabled = 540,
     NetworkReadTimeoutError = 598,
     NetworkConnectionTimeoutError = 599,
-
 }
 
 impl HttpStatus {

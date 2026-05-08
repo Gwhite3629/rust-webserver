@@ -1,25 +1,25 @@
 use std::fs::File;
-use std::path::Path;
 use std::io::{BufReader, Read};
+use std::path::Path;
 
-use crate::file::{is_valid_path, resolve_path};
-use crate::handler::{UserAuth, UserAuthResult, AuthData};
-use crate::{AuthType, DefaultFields, HttpFields, HttpRequest, HttpStatus, NonceTracker, WriterType};
 use crate::HttpResponse;
+use crate::file::{is_valid_path, resolve_path};
+use crate::handler::{AuthData, UserAuth, UserAuthResult};
+use crate::{
+    AuthType, DefaultFields, HttpFields, HttpRequest, HttpStatus, NonceTracker, WriterType,
+};
 
 use crate::HttpFieldHandler;
 
-use crate::file::get_mimetype;
-use crate::RequestState;
 use crate::RequestEffect;
+use crate::RequestState;
+use crate::file::get_mimetype;
 
 use crate::config::CONFIG;
 
 use colored::Colorize;
 
-
 fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
-
     let mut currentstatus: HttpStatus;
     let mut headers = HttpFields::new();
 
@@ -27,7 +27,15 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
     let mut contents = Vec::<u8>::new();
 
     let mut req_path = Path::new(req.target.path.as_str());
-    let base = Path::new(&CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().path);
+    let base = Path::new(
+        &CONFIG
+            .get()
+            .unwrap()
+            .servers
+            .get(&req.server_name)
+            .unwrap()
+            .path,
+    );
     let path = Path::new(base);
     let mut final_path: String;
 
@@ -40,7 +48,11 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
 
     if is_valid_path(&req_path, &req.server_name) {
         currentstatus = HttpStatus::OK;
-        final_path = path.join(&req_path.strip_prefix("/").unwrap()).to_str().unwrap().to_string();
+        final_path = path
+            .join(&req_path.strip_prefix("/").unwrap())
+            .to_str()
+            .unwrap()
+            .to_string();
     } else {
         currentstatus = HttpStatus::NotFound;
         final_path = path.join("404.html").to_str().unwrap().to_string();
@@ -58,29 +70,41 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
 
     // Loop over request headers and call custom methods
     for (key, val) in req.headers {
-        let () = match CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().field_handlers.get(&key) {
+        let () = match CONFIG
+            .get()
+            .unwrap()
+            .servers
+            .get(&req.server_name)
+            .unwrap()
+            .field_handlers
+            .get(&key)
+        {
             Some(fun) => {
                 match DefaultFields::from_string(key).unwrap() {
                     DefaultFields::ACCEPT => {
                         println!("Got accept header.");
                         //fun(val, &mut RequestState{path: &final_path});
-                        ()},
+                        ()
+                    }
                     DefaultFields::ACCEPTENCODING => {
                         println!("Parsing encoding:");
                         wfun = Some(Box::new(fun));
                         wval = Some(val);
-                        ()},
+                        ()
+                    }
                     DefaultFields::AUTHORIZATION => {
                         println!("Parsing authorization:");
                         dfun = Some(Box::new(fun));
                         dval = Some(val);
-                        ()},
+                        ()
+                    }
                     DefaultFields::CONNECTION => {
                         println!("Got connection header.");
-                        ()},
+                        ()
+                    }
                     _ => (),
                 }
-            },
+            }
             None => (),
         };
     }
@@ -97,46 +121,51 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
             }
             // Check if realm matches request and send new 401 if it doesn't
             match dval {
-                Some(d) => {
-                    match dfun {
-                        Some(func) => {
-                            let realm = a.name.clone();
-                            let nonce = match state.get(&a.name) {
-                                Some(n) => Some(n.val.clone()),
-                                None => None,
-                            };
-                            let userauth = UserAuth {
-                                user: a.user,
-                                pass: a.pass,
-                                realm,
-                                nonce: nonce.clone(),
-                            };
-                            let userdata = AuthData {
-                                method: req.method,
-                                uri: req.target,
-                                nonce,
-                            };
-                            match func(d, &mut RequestState{auth: &userdata}){
-                                RequestEffect::DECODER(dec) => {
-                                    match dec {
-                                        Some(mut call) => {
-                                            match call(&userauth) {
-                                                UserAuthResult::AUTHORIZED => {
-                                                    currentstatus = HttpStatus::OK;
-                                                }
-                                                UserAuthResult::UNAUTHORIZED => {
-                                                    currentstatus = HttpStatus::Forbidden;
-                                                    f = None;
-                                                }
-                                                UserAuthResult::CHANGEREALM => {
-                                                    currentstatus = HttpStatus::Unauthorized;
-                                                    match a.method {
-                                                        AuthType::BASIC => {
-                                                            headers.insert("WWW-authenticate", format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name).as_str());
-                                                        },
-                                                        AuthType::DIGEST => {
-                                                            println!("{}","Sending 401".green());
-                                                            headers.insert("WWW-authenticate", 
+                Some(d) => match dfun {
+                    Some(func) => {
+                        let realm = a.name.clone();
+                        let nonce = match state.get(&a.name) {
+                            Some(n) => Some(n.val.clone()),
+                            None => None,
+                        };
+                        let userauth = UserAuth {
+                            user: a.user,
+                            pass: a.pass,
+                            realm,
+                            nonce: nonce.clone(),
+                        };
+                        let userdata = AuthData {
+                            method: req.method,
+                            uri: req.target,
+                            nonce,
+                        };
+                        match func(d, &mut RequestState { auth: &userdata }) {
+                            RequestEffect::DECODER(dec) => match dec {
+                                Some(mut call) => match call(&userauth) {
+                                    UserAuthResult::AUTHORIZED => {
+                                        currentstatus = HttpStatus::OK;
+                                    }
+                                    UserAuthResult::UNAUTHORIZED => {
+                                        currentstatus = HttpStatus::Forbidden;
+                                        f = None;
+                                    }
+                                    UserAuthResult::CHANGEREALM => {
+                                        currentstatus = HttpStatus::Unauthorized;
+                                        match a.method {
+                                            AuthType::BASIC => {
+                                                headers.insert(
+                                                    "WWW-authenticate",
+                                                    format!(
+                                                        "{} realm=\"{}\"",
+                                                        AuthType::as_str(&a.method),
+                                                        a.name
+                                                    )
+                                                    .as_str(),
+                                                );
+                                            }
+                                            AuthType::DIGEST => {
+                                                println!("{}", "Sending 401".green());
+                                                headers.insert("WWW-authenticate",
                                                             format!("{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
                                                             AuthType::as_str(&a.method),
                                                             a.name,
@@ -147,49 +176,55 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                                                     state.get(&a.name).unwrap().val.clone()
                                                                 },
                                                             },) .as_str());
-                                                        },
-                                                    };
-                                                    f = None;
-                                                },
                                             }
-                                        },
-                                        None => (),
+                                        };
+                                        f = None;
                                     }
                                 },
-                                RequestEffect::WRITER(_) => (),
-                            }
+                                None => (),
+                            },
+                            RequestEffect::WRITER(_) => (),
                         }
-                        None => {
-                            currentstatus = HttpStatus::InternalServerError;
-                            f = None;
-                        },
+                    }
+                    None => {
+                        currentstatus = HttpStatus::InternalServerError;
+                        f = None;
                     }
                 },
                 None => {
                     currentstatus = HttpStatus::Unauthorized;
                     match a.method {
                         AuthType::BASIC => {
-                            headers.insert("WWW-authenticate", format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name).as_str());
-                        },
+                            headers.insert(
+                                "WWW-authenticate",
+                                format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name)
+                                    .as_str(),
+                            );
+                        }
                         AuthType::DIGEST => {
-                            println!("{}","Sending 401".green());
-                            headers.insert("WWW-authenticate", 
-                            format!("{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
-                            AuthType::as_str(&a.method),
-                            a.name,
-                            match state.get(&a.name) {
-                                Some(a) => a.val.clone(),
-                                None => {
-                                    state.insert(a.name.clone());
-                                    state.get(&a.name).unwrap().val.clone()
-                                },
-                            },) .as_str());
-                        },
+                            println!("{}", "Sending 401".green());
+                            headers.insert(
+                                "WWW-authenticate",
+                                format!(
+                                    "{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
+                                    AuthType::as_str(&a.method),
+                                    a.name,
+                                    match state.get(&a.name) {
+                                        Some(a) => a.val.clone(),
+                                        None => {
+                                            state.insert(a.name.clone());
+                                            state.get(&a.name).unwrap().val.clone()
+                                        }
+                                    },
+                                )
+                                .as_str(),
+                            );
+                        }
                     };
                     f = None;
-                },
+                }
             }
-        },
+        }
         None => (),
     }
 
@@ -201,16 +236,17 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
     // Read file and write contents to buffer
     if f.is_some() {
         let mut buf_reader: BufReader<File> = BufReader::new(f.unwrap().ok().unwrap());
-        let mut contents_container = RequestState{contents: &mut contents};
+        let mut contents_container = RequestState {
+            contents: &mut contents,
+        };
         match buf_reader.read_to_end(&mut file_contents) {
             Ok(_) => {
-                
                 let writer: WriterType;
                 writer = match wfun {
                     Some(wfun) => match wval {
                         Some(val) => {
                             if val.contains("gzip") {
-                               headers.insert("content-encoding", "gzip");
+                                headers.insert("content-encoding", "gzip");
                             } else {
                                 headers.insert("content-encoding", "identity");
                             };
@@ -218,10 +254,10 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                 RequestEffect::WRITER(w) => w,
                                 RequestEffect::DECODER(_) => None,
                             }
-                        },
-                        None => None
+                        }
+                        None => None,
                     },
-                    None => None
+                    None => None,
                 };
 
                 //let mut gzip_writer = GzEncoder::new(&mut contents, Compression::default());
@@ -231,16 +267,14 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                             headers.insert("content-length", result.to_string().as_str());
                             headers.insert("content-type", get_mimetype(final_path).as_str());
                             headers.insert("transfer-encoding", "chunked");
-                        },
+                        }
                         Err(error) => panic!("Could not write response content: {error:?}"),
                     }
                 } else {
                     currentstatus = HttpStatus::InternalServerError;
                 }
-
-            },
-            Err(_) => {
-                currentstatus = HttpStatus::InternalServerError},
+            }
+            Err(_) => currentstatus = HttpStatus::InternalServerError,
         }
     } else {
         println!("{currentstatus:#?}");
@@ -257,7 +291,6 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
     }
 }
 
-
 pub fn handle_get<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
     let res = __internal_process(req, state);
 
@@ -265,7 +298,7 @@ pub fn handle_get<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpRespo
         version: res.version,
         status: res.status,
         headers: res.headers,
-        content: res.content
+        content: res.content,
     }
 }
 
@@ -276,7 +309,7 @@ pub fn handle_head(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
         version: res.version,
         status: res.status,
         headers: res.headers,
-        content: Vec::new()
+        content: Vec::new(),
     }
 }
 
@@ -285,13 +318,11 @@ pub fn handle_options(_req: HttpRequest, _state: &mut NonceTracker) -> HttpRespo
 }
 
 pub fn handle_trace(req: HttpRequest, _state: &mut NonceTracker) -> HttpResponse {
-        
     let mut currentstatus = HttpStatus::OK;
     let mut headers = HttpFields::new();
 
     let file_contents = Vec::<u8>::from(req.to_string());
     let mut contents = Vec::<u8>::new();
-
 
     // Captured values used for compression writer dispatch
     let mut wfun: Option<Box<HttpFieldHandler>> = None;
@@ -299,30 +330,43 @@ pub fn handle_trace(req: HttpRequest, _state: &mut NonceTracker) -> HttpResponse
 
     // Loop over request headers and call custom methods
     for (key, val) in req.headers {
-        let () = match CONFIG.get().unwrap().servers.get(&req.server_name).unwrap().field_handlers.get(&key) {
+        let () = match CONFIG
+            .get()
+            .unwrap()
+            .servers
+            .get(&req.server_name)
+            .unwrap()
+            .field_handlers
+            .get(&key)
+        {
             Some(fun) => {
                 match DefaultFields::from_string(key).unwrap() {
                     DefaultFields::ACCEPT => {
                         println!("Got accept header.");
                         //fun(val, &mut RequestState{path: &final_path});
-                        ()},
+                        ()
+                    }
                     DefaultFields::ACCEPTENCODING => {
                         println!("Parsing encoding:");
                         wfun = Some(Box::new(fun));
                         wval = Some(val);
-                        ()},
+                        ()
+                    }
                     DefaultFields::CONNECTION => {
                         println!("Got connection header.");
-                        ()},
+                        ()
+                    }
                     _ => (),
                 }
-            },
+            }
             None => (),
         };
     }
 
     {
-        let mut contents_container = RequestState{contents: &mut contents};
+        let mut contents_container = RequestState {
+            contents: &mut contents,
+        };
 
         let writer: WriterType;
         writer = match wfun {
@@ -337,10 +381,10 @@ pub fn handle_trace(req: HttpRequest, _state: &mut NonceTracker) -> HttpResponse
                         RequestEffect::WRITER(w) => w,
                         RequestEffect::DECODER(_) => None,
                     }
-                },
-                None => None
+                }
+                None => None,
             },
-            None => None
+            None => None,
         };
 
         if writer.is_some() {
@@ -348,7 +392,7 @@ pub fn handle_trace(req: HttpRequest, _state: &mut NonceTracker) -> HttpResponse
                 Ok(result) => {
                     headers.insert("content-length", result.to_string().as_str());
                     headers.insert("transfer-encoding", "chunked");
-                },
+                }
                 Err(error) => panic!("Could not write response content: {error:?}"),
             }
         } else {
