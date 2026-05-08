@@ -114,6 +114,7 @@ pub fn default_authorization<'req>(val: String, state: &'req mut RequestState) -
         let mut cnonce = String::new();
         let mut qop = String::new();
         let mut client_response = String::new();
+        let mut realm = String::new();
         for (left, right) in pairs {
             match left {
                 "nc" => nc = String::from(right),
@@ -126,6 +127,10 @@ pub fn default_authorization<'req>(val: String, state: &'req mut RequestState) -
                     client_response = String::from(right);
                     client_response.retain(|c| c != '\"');
                 },
+                "realm" => {
+                    realm = String::from(right);
+                    realm.retain(|c| c != '\"');
+                },
                 _ => (),
             }
         }
@@ -133,19 +138,23 @@ pub fn default_authorization<'req>(val: String, state: &'req mut RequestState) -
             Some(
                 Box::new(
                     move |a| {
-                        let ha1: String = format!("{:x}",md5::compute(a.user.clone() + ":" + a.realm.as_str() + ":" + a.pass.as_str()));
-                        let ha2: String = format!("{:x}",md5::compute(unsafe{state.auth.method.as_str()}.to_owned() + ":" + &unsafe{state.auth.uri.to_string()}));
-                        // Response = MD5(HA1:servernonce:nc:cnonce:qop:HA2)
-                        let response: String = format!("{:x}",
-                            md5::compute(ha1 + ":" + 
-                                match &a.nonce {
-                                    Some(v) => v,
-                                    None => "0",
-                                } + ":"
-                                + nc.as_str() + ":" + cnonce.as_str() + ":" + qop.as_str() + ":" + ha2.as_str()));
-                        match response == client_response {
-                            true => UserAuthResult::AUTHORIZED,
-                            false => UserAuthResult::UNAUTHORIZED,
+                        if realm != a.realm.as_str() {
+                            UserAuthResult::CHANGEREALM
+                        } else {
+                            let ha1: String = format!("{:x}",md5::compute(a.user.clone() + ":" + a.realm.as_str() + ":" + a.pass.as_str()));
+                            let ha2: String = format!("{:x}",md5::compute(unsafe{state.auth.method.as_str()}.to_owned() + ":" + &unsafe{state.auth.uri.to_string()}));
+                            // Response = MD5(HA1:servernonce:nc:cnonce:qop:HA2)
+                            let response: String = format!("{:x}",
+                                md5::compute(ha1 + ":" + 
+                                    match &a.nonce {
+                                        Some(v) => v,
+                                        None => "0",
+                                    } + ":"
+                                    + nc.as_str() + ":" + cnonce.as_str() + ":" + qop.as_str() + ":" + ha2.as_str()));
+                            match response == client_response {
+                                true => UserAuthResult::AUTHORIZED,
+                                false => UserAuthResult::UNAUTHORIZED,
+                            }
                         }
                     }
                 )

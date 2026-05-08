@@ -64,7 +64,8 @@ pub struct UserAuth {
 
 pub enum UserAuthResult {
     UNAUTHORIZED,
-    AUTHORIZED
+    AUTHORIZED,
+    CHANGEREALM,
 }
 
 pub struct AuthData {

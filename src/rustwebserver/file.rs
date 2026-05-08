@@ -60,18 +60,19 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
                         r.req_path.to_str().unwrap(),
                         direct.to_str().unwrap(),
                         1));
-
-                        if set_auth == false {
-                            match r.auth {
-                                Some(a) => {
-                                    set_auth = true;
-                                    auth = Some(a);
-                                },
-                                None => auth = None,
-                            };
-                        }
                     },
                     None => (),
+                }
+                if set_auth == false {
+                    if res_path.to_string_lossy().to_string().contains(r.req_path.to_str().unwrap()) {
+                        match r.auth {
+                            Some(a) => {
+                                set_auth = true;
+                                auth = Some(a);
+                            },
+                            None => auth = None,
+                        };
+                    }
                 }
             }
         },

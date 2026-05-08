@@ -87,6 +87,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
 
     match auth {
         Some(a) => {
+            // Remove nonce after 100 requests
             let t = state.map.get(&a.name);
             if t.is_some() {
                 if t.unwrap().n >= 100 {
@@ -94,6 +95,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                     dval = None;
                 }
             }
+            // Check if realm matches request and send new 401 if it doesn't
             match dval {
                 Some(d) => {
                     match dfun {
@@ -126,6 +128,29 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                                     currentstatus = HttpStatus::Forbidden;
                                                     f = None;
                                                 }
+                                                UserAuthResult::CHANGEREALM => {
+                                                    currentstatus = HttpStatus::Unauthorized;
+                                                    match a.method {
+                                                        AuthType::BASIC => {
+                                                            headers.insert("WWW-authenticate", format!("{} realm=\"{}\"", AuthType::as_str(&a.method), a.name).as_str());
+                                                        },
+                                                        AuthType::DIGEST => {
+                                                            println!("{}","Sending 401".green());
+                                                            headers.insert("WWW-authenticate", 
+                                                            format!("{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
+                                                            AuthType::as_str(&a.method),
+                                                            a.name,
+                                                            match state.get(&a.name) {
+                                                                Some(a) => a.val.clone(),
+                                                                None => {
+                                                                    state.insert(a.name.clone());
+                                                                    state.get(&a.name).unwrap().val.clone()
+                                                                },
+                                                            },) .as_str());
+                                                        },
+                                                    };
+                                                    f = None;
+                                                },
                                             }
                                         },
                                         None => (),
