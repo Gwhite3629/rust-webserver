@@ -58,6 +58,7 @@ pub fn default_accept_encoding<'req>(
     val: String,
     state: &'req mut RequestState,
 ) -> RequestEffect<'req> {
+    println!("{}", val);
     if val.contains("gzip") {
         let mut gz = GzEncoder::new(unsafe { &mut state.contents }, Compression::default());
         println!("Using gzip encoding");

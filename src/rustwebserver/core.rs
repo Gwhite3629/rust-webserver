@@ -111,10 +111,10 @@ impl Server {
 
             for event in events.iter() {
                 //println!("Got event");
+
                 match event.token() {
                     LISTENER => self
-                        .accept_new_connection(poll.registry())
-                        .expect("Error accepting connection."),
+                        .accept_new_connection(poll.registry()).expect("Error acecpting connectio."),
                     _ => self.established_connection(poll.registry(), event),
                 }
             }
@@ -357,11 +357,23 @@ impl OpenConnection {
                         None => return,
                     };
                     if !self.sent_http_response {
-                        self.socket.write_all(res.to_string().as_bytes()).unwrap();
+                        self.socket.write(res.to_string().as_bytes()).unwrap();
                         self.sent_http_response = true;
                     }
                     for chunk in HttpProcessor::to_chunks(res) {
-                        self.socket.write(&chunk).unwrap();
+                        match self.socket.write_all(&chunk) {
+                            Ok(_) => (),
+                            Err(error) => {
+                                if let ErrorKind::BrokenPipe = error.kind() {
+                                    continue;
+                                }
+
+                                // Log stuff
+                                println!("Write error: {error:?}");
+                                self.closing = true;
+                                return;
+                            }
+                        }
                     }
                     self.closing = true;
                     return;
