@@ -1,6 +1,7 @@
 
 use std::path::Path;
 
+use crate::cache::{CacheTry, CacheType};
 use crate::{HttpResponse, ServerState};
 use crate::file::{is_valid_path, resolve_path};
 use crate::handler::{AuthData, UserAuth, UserAuthResult};
@@ -226,39 +227,47 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
         None => (),
     }
 
-    let mut f: Option<&Vec<u8>> = None;
+    let f: Option<&Vec<u8>>;
 
     if currentstatus == HttpStatus::Forbidden {
         final_path = path.join("403.html").to_str().unwrap().to_string();
         read_file = true;
     }
 
-    if read_file {
-        match state.file_cache.get_and_cache(&final_path) {
-            Some(cont) => f = Some(cont),
-            None => {
-                read_file = false;
-                f = None;
-            },
-        }
-    }
+    let cache_type: Option<CacheType>;
+    if wval.clone().is_some_and(|t| t.contains("gzip")) {
+        headers.insert("content-encoding", "gzip");
+        cache_type = Some(CacheType::GZIP);
+    } else {
+        headers.insert("content-encoding", "identity");
+        cache_type = Some(CacheType::IDENTITY);
+    };
+
+    let mut cache_write: bool = false;
 
     // Read file and write contents to buffer
     if read_file {
-        let mut contents_container = RequestState {
-            contents: &mut contents,
-        };
-        match f {
-            Some(_) => {
+        match state.file_cache.try_get(&final_path, &cache_type) {
+            CacheTry::GOTCORRECT(cont) => {
+                f = Some(cont);
+                contents.extend_from_slice(f.unwrap());
+
+                headers.insert("content-length", f.unwrap().len().to_string().as_str());
+                headers.insert("content-type", get_mimetype(&final_path).as_str());
+                headers.insert("transfer-encoding", "chunked");
+
+            }
+            CacheTry::GOTPLAIN(cont) => {
+                f = Some(cont);
+
+                let mut contents_container = RequestState {
+                    contents: &mut contents,
+                };
+
                 let writer: WriterType;
                 writer = match wfun {
                     Some(wfun) => match wval {
                         Some(val) => {
-                            if val.contains("gzip") {
-                                headers.insert("content-encoding", "gzip");
-                            } else {
-                                headers.insert("content-encoding", "identity");
-                            };
                             match wfun(val, &mut contents_container) {
                                 RequestEffect::WRITER(w) => w,
                                 RequestEffect::DECODER(_) => None,
@@ -274,7 +283,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
                     match writer.unwrap()(f.unwrap()) {
                         Ok(result) => {
                             headers.insert("content-length", result.to_string().as_str());
-                            headers.insert("content-type", get_mimetype(final_path).as_str());
+                            headers.insert("content-type", get_mimetype(&final_path).as_str());
                             headers.insert("transfer-encoding", "chunked");
                         }
                         Err(error) => panic!("Could not write response content: {error:?}"),
@@ -282,14 +291,24 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
                 } else {
                     currentstatus = HttpStatus::InternalServerError;
                 }
+                cache_write = true;
             }
-            None => currentstatus = HttpStatus::InternalServerError,
+            CacheTry::FAIL => {
+                println!("{currentstatus:#?}");
+                if (currentstatus != HttpStatus::Unauthorized) & (currentstatus != HttpStatus::Forbidden) {
+                    currentstatus = HttpStatus::BadRequest;
+                }
+            },
         }
     } else {
         println!("{currentstatus:#?}");
         if (currentstatus != HttpStatus::Unauthorized) & (currentstatus != HttpStatus::Forbidden) {
             currentstatus = HttpStatus::BadRequest;
         }
+    }
+
+    if cache_write {
+        state.file_cache.cache(final_path.clone(), &cache_type, contents.clone());
     }
 
     HttpResponse {

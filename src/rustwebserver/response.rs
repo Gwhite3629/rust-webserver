@@ -41,7 +41,7 @@ impl HttpResponse {
         //let metadata = metadata(&file).unwrap();
 
         res.insert("content-length", len.to_string().as_str());
-        res.insert("content-type", get_mimetype(file).as_str());
+        res.insert("content-type", get_mimetype(&file).as_str());
         res.insert("content-encoding", "gzip");
         res.insert("transfer-encoding", "chunked");
 

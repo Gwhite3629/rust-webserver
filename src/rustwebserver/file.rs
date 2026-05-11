@@ -135,7 +135,7 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
     (res_path, auth)
 }
 
-pub fn get_mimetype(file: String) -> String {
+pub fn get_mimetype(file: &String) -> String {
     let e = Path::new(file.as_str())
         .extension()
         .map(|ext| ext.to_str().unwrap_or(""))
