@@ -55,7 +55,7 @@ impl HttpProcessor {
     pub fn to_chunks(res: HttpResponse) -> impl Iterator<Item = Vec<u8>> {
         let mut chunks = Vec::new();
 
-        for chunk in res.content.chunks(1 * KB) {
+        for chunk in res.content.chunks(1000 * KB) {
             let mut wr = Vec::<u8>::new();
             wr.append(
                 &mut format!("{:x}", chunk.len())

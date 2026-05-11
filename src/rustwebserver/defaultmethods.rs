@@ -249,7 +249,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
     if read_file {
         match state.file_cache.try_get(&final_path, &cache_type) {
             CacheTry::GOTCORRECT(cont) => {
-                f = Some(cont);
+                f = Some(&cont);
                 contents.extend_from_slice(f.unwrap());
 
                 headers.insert("content-length", f.unwrap().len().to_string().as_str());
@@ -258,7 +258,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
 
             }
             CacheTry::GOTPLAIN(cont) => {
-                f = Some(cont);
+                f = Some(&cont);
 
                 let mut contents_container = RequestState {
                     contents: &mut contents,
@@ -308,7 +308,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
     }
 
     if cache_write {
-        state.file_cache.cache(final_path.clone(), &cache_type, contents.clone());
+        state.file_cache.cache(final_path.clone(), cache_type, contents.clone());
     }
 
     HttpResponse {
