@@ -5,6 +5,7 @@ use crate::CaseInsensitiveString;
 use crate::HttpMethod;
 use crate::HttpRequest;
 use crate::HttpResponse;
+use crate::ServerState;
 use crate::URI;
 use crate::defaultfields::default_authorization;
 use crate::defaultfields::{
@@ -77,7 +78,7 @@ pub union RequestState<'req> {
     pub auth: &'req AuthData,
 }
 
-type HttpMethodHandler = dyn Fn(HttpRequest, &mut NonceTracker) -> HttpResponse + Sync + Send;
+type HttpMethodHandler = dyn Fn(HttpRequest, &mut ServerState) -> HttpResponse + Sync + Send;
 
 pub type WriterType<'req> =
     Option<Box<dyn FnMut(&[u8]) -> Result<usize, std::io::Error> + Send + Sync + 'req>>;

@@ -13,6 +13,8 @@ mod core;
 
 mod httpengine;
 
+mod cache;
+
 pub use httpengine::HttpProcessor;
 
 pub use http::CaseInsensitiveString;
@@ -27,7 +29,10 @@ pub use core::Processor;
 pub use core::Server;
 pub use core::tls_setup;
 pub use core::LISTENER;
+pub use core::ServerState;
 pub use thread::ThreadPool;
+
+pub use cache::FileCache;
 
 pub use config::Auth;
 pub use config::AuthType;

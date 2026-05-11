@@ -22,13 +22,18 @@ use mio::{
 
 use libc;
 
-use crate::{CONFIG, HttpProcessor, NonceTracker, config::Protocol};
+use crate::{CONFIG, HttpProcessor, NonceTracker, config::Protocol, FileCache};
 
 pub const LISTENER: mio::Token = mio::Token(0);
 
 #[derive(Clone)]
 pub enum Processor {
     HTTP,
+}
+
+pub struct ServerState {
+    pub noncehandler: NonceTracker,
+    pub file_cache: FileCache,
 }
 
 pub struct Server {
@@ -39,7 +44,7 @@ pub struct Server {
     next_id: usize,
     tls_config: Option<Arc<ServerConfig>>,
     engine: Processor,
-    noncehandler: NonceTracker,
+    state: ServerState,
 }
 
 struct OpenConnection {
@@ -86,7 +91,7 @@ impl Server {
             next_id: 2,
             tls_config,
             engine: mode.to_processor(),
-            noncehandler: NonceTracker::new(),
+            state: ServerState { noncehandler: NonceTracker::new(), file_cache: FileCache::new() },
         }
     }
 
@@ -146,7 +151,7 @@ impl Server {
             self.connections
                 .get_mut(&token)
                 .unwrap()
-                .ready(reg, event, &mut self.noncehandler);
+                .ready(reg, event, &mut self.state);
 
             if self.connections[&token].is_closed() {
                 self.connections.remove(&token);
@@ -184,16 +189,16 @@ impl OpenConnection {
         }
     }
 
-    fn ready(&mut self, reg: &Registry, event: &Event, noncehandler: &mut NonceTracker) {
+    fn ready(&mut self, reg: &Registry, event: &Event, state: &mut ServerState) {
         if event.is_readable() {
             //println!("Reading event");
             match self.protocol {
                 Protocol::HTTP => {
-                    self.try_text_read(noncehandler);
+                    self.try_text_read(state);
                 }
                 Protocol::HTTPS => {
                     self.tls_read();
-                    self.try_text_read_tls(noncehandler);
+                    self.try_text_read_tls(state);
                 }
             }
         }
@@ -250,7 +255,7 @@ impl OpenConnection {
         }
     }
 
-    fn try_text_read_tls(&mut self, noncehandler: &mut NonceTracker) {
+    fn try_text_read_tls(&mut self, state: &mut ServerState) {
         if let Ok(io_state) = self.tls_conn.as_mut().unwrap().process_new_packets() {
             //println!("got io_state");
             if let Some(mut early_data) = self.tls_conn.as_mut().unwrap().early_data() {
@@ -260,7 +265,7 @@ impl OpenConnection {
 
                 if !buf.is_empty() {
                     //println!("Processing early text");
-                    self.incoming_text(&buf, noncehandler);
+                    self.incoming_text(&buf, state);
                     return;
                 }
             }
@@ -279,12 +284,12 @@ impl OpenConnection {
                     .read_exact(&mut buf)
                     .unwrap();
 
-                self.incoming_text(&buf, noncehandler);
+                self.incoming_text(&buf, state);
             }
         }
     }
 
-    fn try_text_read(&mut self, noncehandler: &mut NonceTracker) {
+    fn try_text_read(&mut self, state: &mut ServerState) {
         let mut buf = vec![0u8; 4 * 1024];
         let n: usize;
         match self.socket.read(&mut buf) {
@@ -312,7 +317,7 @@ impl OpenConnection {
 
         //println!("bytes: {n}");
         if n > 0 {
-            self.incoming_text(&buf, noncehandler);
+            self.incoming_text(&buf, state);
         }
     }
 
@@ -325,7 +330,7 @@ impl OpenConnection {
         }
     }
 
-    fn incoming_text(&mut self, buf: &[u8], noncehandler: &mut NonceTracker) {
+    fn incoming_text(&mut self, buf: &[u8], state: &mut ServerState) {
         //let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
         //println!("RAW TEXT:\n{print_str}");
         match self.engine {
@@ -334,7 +339,7 @@ impl OpenConnection {
                     let res = match HttpProcessor::handle_connection(
                         buf,
                         self.name.clone(),
-                        noncehandler,
+                        state,
                     ) {
                         Some(res) => res,
                         None => return,
@@ -365,7 +370,7 @@ impl OpenConnection {
                     let res = match HttpProcessor::handle_connection(
                         buf,
                         self.name.clone(),
-                        noncehandler,
+                        state,
                     ) {
                         Some(res) => res,
                         None => {

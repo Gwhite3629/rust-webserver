@@ -1,12 +1,11 @@
-use std::fs::File;
-use std::io::{BufReader, Read};
+
 use std::path::Path;
 
-use crate::HttpResponse;
+use crate::{HttpResponse, ServerState};
 use crate::file::{is_valid_path, resolve_path};
 use crate::handler::{AuthData, UserAuth, UserAuthResult};
 use crate::{
-    AuthType, DefaultFields, HttpFields, HttpRequest, HttpStatus, NonceTracker, WriterType,
+    AuthType, DefaultFields, HttpFields, HttpRequest, HttpStatus, WriterType,
 };
 
 use crate::HttpFieldHandler;
@@ -19,11 +18,10 @@ use crate::config::CONFIG;
 
 use colored::Colorize;
 
-fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
+fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpResponse {
     let mut currentstatus: HttpStatus;
     let mut headers = HttpFields::new();
 
-    let mut file_contents = Vec::<u8>::new();
     let mut contents = Vec::<u8>::new();
 
     let mut req_path = Path::new(req.target.path.as_str());
@@ -59,7 +57,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
     }
 
     // File to be sent to client
-    let mut f = Some(File::open(&final_path));
+    let mut read_file: bool = true;
 
     // Captured values used for compression writer dispatch
     let mut wfun: Option<Box<HttpFieldHandler>> = None;
@@ -112,10 +110,10 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
     match auth {
         Some(a) => {
             // Remove nonce after 100 requests
-            let t = state.map.get(&a.name);
+            let t = state.noncehandler.map.get(&a.name);
             if t.is_some() {
                 if t.unwrap().n >= 100 {
-                    state.map.remove(&a.name);
+                    state.noncehandler.map.remove(&a.name);
                     dval = None;
                 }
             }
@@ -124,7 +122,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                 Some(d) => match dfun {
                     Some(func) => {
                         let realm = a.name.clone();
-                        let nonce = match state.get(&a.name) {
+                        let nonce = match state.noncehandler.get(&a.name) {
                             Some(n) => Some(n.val.clone()),
                             None => None,
                         };
@@ -147,7 +145,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                     }
                                     UserAuthResult::UNAUTHORIZED => {
                                         currentstatus = HttpStatus::Forbidden;
-                                        f = None;
+                                        read_file = false;
                                     }
                                     UserAuthResult::CHANGEREALM => {
                                         currentstatus = HttpStatus::Unauthorized;
@@ -169,16 +167,16 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                                             format!("{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
                                                             AuthType::as_str(&a.method),
                                                             a.name,
-                                                            match state.get(&a.name) {
+                                                            match state.noncehandler.get(&a.name) {
                                                                 Some(a) => a.val.clone(),
                                                                 None => {
-                                                                    state.insert(a.name.clone());
-                                                                    state.get(&a.name).unwrap().val.clone()
+                                                                    state.noncehandler.insert(a.name.clone());
+                                                                    state.noncehandler.get(&a.name).unwrap().val.clone()
                                                                 },
                                                             },) .as_str());
                                             }
                                         };
-                                        f = None;
+                                        read_file = false;
                                     }
                                 },
                                 None => (),
@@ -188,7 +186,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                     }
                     None => {
                         currentstatus = HttpStatus::InternalServerError;
-                        f = None;
+                        read_file = false;
                     }
                 },
                 None => {
@@ -209,11 +207,11 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                                     "{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
                                     AuthType::as_str(&a.method),
                                     a.name,
-                                    match state.get(&a.name) {
+                                    match state.noncehandler.get(&a.name) {
                                         Some(a) => a.val.clone(),
                                         None => {
-                                            state.insert(a.name.clone());
-                                            state.get(&a.name).unwrap().val.clone()
+                                            state.noncehandler.insert(a.name.clone());
+                                            state.noncehandler.get(&a.name).unwrap().val.clone()
                                         }
                                     },
                                 )
@@ -221,26 +219,37 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                             );
                         }
                     };
-                    f = None;
+                    read_file = false;
                 }
             }
         }
         None => (),
     }
 
+    let mut f: Option<&Vec<u8>> = None;
+
     if currentstatus == HttpStatus::Forbidden {
         final_path = path.join("403.html").to_str().unwrap().to_string();
-        f = Some(File::open(&final_path));
+        read_file = true;
+    }
+
+    if read_file {
+        match state.file_cache.get_and_cache(&final_path) {
+            Some(cont) => f = Some(cont),
+            None => {
+                read_file = false;
+                f = None;
+            },
+        }
     }
 
     // Read file and write contents to buffer
-    if f.is_some() {
-        let mut buf_reader: BufReader<File> = BufReader::new(f.unwrap().ok().unwrap());
+    if read_file {
         let mut contents_container = RequestState {
             contents: &mut contents,
         };
-        match buf_reader.read_to_end(&mut file_contents) {
-            Ok(_) => {
+        match f {
+            Some(_) => {
                 let writer: WriterType;
                 writer = match wfun {
                     Some(wfun) => match wval {
@@ -262,7 +271,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
 
                 //let mut gzip_writer = GzEncoder::new(&mut contents, Compression::default());
                 if writer.is_some() {
-                    match writer.unwrap()(&file_contents) {
+                    match writer.unwrap()(f.unwrap()) {
                         Ok(result) => {
                             headers.insert("content-length", result.to_string().as_str());
                             headers.insert("content-type", get_mimetype(final_path).as_str());
@@ -274,7 +283,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
                     currentstatus = HttpStatus::InternalServerError;
                 }
             }
-            Err(_) => currentstatus = HttpStatus::InternalServerError,
+            None => currentstatus = HttpStatus::InternalServerError,
         }
     } else {
         println!("{currentstatus:#?}");
@@ -291,7 +300,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpR
     }
 }
 
-pub fn handle_get<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
+pub fn handle_get<'req>(req: HttpRequest, state: &mut ServerState) -> HttpResponse {
     let res = __internal_process(req, state);
 
     HttpResponse {
@@ -302,7 +311,7 @@ pub fn handle_get<'req>(req: HttpRequest, state: &mut NonceTracker) -> HttpRespo
     }
 }
 
-pub fn handle_head(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
+pub fn handle_head(req: HttpRequest, state: &mut ServerState) -> HttpResponse {
     let res = __internal_process(req, state);
 
     HttpResponse {
@@ -313,11 +322,11 @@ pub fn handle_head(req: HttpRequest, state: &mut NonceTracker) -> HttpResponse {
     }
 }
 
-pub fn handle_options(_req: HttpRequest, _state: &mut NonceTracker) -> HttpResponse {
+pub fn handle_options(_req: HttpRequest, _state: &mut ServerState) -> HttpResponse {
     HttpResponse::new()
 }
 
-pub fn handle_trace(req: HttpRequest, _state: &mut NonceTracker) -> HttpResponse {
+pub fn handle_trace(req: HttpRequest, _state: &mut ServerState) -> HttpResponse {
     let mut currentstatus = HttpStatus::OK;
     let mut headers = HttpFields::new();
 

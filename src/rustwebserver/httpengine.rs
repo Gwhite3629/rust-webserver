@@ -1,6 +1,6 @@
 use std::io::BufRead;
 
-use crate::{CONFIG, HttpRequest, HttpResponse, NonceTracker};
+use crate::{CONFIG, HttpRequest, HttpResponse, ServerState};
 
 //const MB: usize = 1000000;
 const KB: usize = 1000;
@@ -15,7 +15,7 @@ impl HttpProcessor {
     pub fn handle_connection(
         buf: &[u8],
         name: String,
-        state: &mut NonceTracker,
+        state: &mut ServerState,
     ) -> Option<HttpResponse> {
         if buf.is_empty() {
             return None;
