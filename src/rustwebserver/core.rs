@@ -4,6 +4,9 @@ use std::{
     net::Shutdown,
     path::Path,
     sync::Arc,
+    os::unix::io::AsRawFd,
+    mem,
+    io,
 };
 
 use rustls::{
@@ -12,10 +15,12 @@ use rustls::{
 };
 
 use mio::{
-    Events, Interest, Poll, Registry, Token,
+    Interest, Registry, Token,
     event::Event,
     net::{TcpListener, TcpStream},
 };
+
+use libc;
 
 use crate::{CONFIG, HttpProcessor, NonceTracker, config::Protocol};
 
@@ -29,7 +34,7 @@ pub enum Processor {
 pub struct Server {
     name: String,
     protocol: Protocol,
-    listener: TcpListener,
+    pub listener: TcpListener,
     connections: HashMap<mio::Token, OpenConnection>,
     next_id: usize,
     tls_config: Option<Arc<ServerConfig>>,
@@ -85,42 +90,6 @@ impl Server {
         }
     }
 
-    pub fn start(&mut self) {
-        let mut poll = match Poll::new() {
-            Ok(p) => p,
-            Err(error) => panic!("Failed to create os-poll structure {error:?}"),
-        };
-        let mut events = Events::with_capacity(256);
-
-        match poll
-            .registry()
-            .register(&mut self.listener, LISTENER, Interest::READABLE)
-        {
-            Ok(_) => (),
-            Err(error) => panic!("Failed to register listener: {error:?}"),
-        };
-
-        loop {
-            match poll.poll(&mut events, None) {
-                Ok(_) => {}
-                Err(error) if error.kind() == ErrorKind::Interrupted => continue,
-                Err(error) => {
-                    panic!("Poll failed: {error:?}");
-                }
-            }
-
-            for event in events.iter() {
-                //println!("Got event");
-
-                match event.token() {
-                    LISTENER => self
-                        .accept_new_connection(poll.registry()).expect("Error acecpting connectio."),
-                    _ => self.established_connection(poll.registry(), event),
-                }
-            }
-        }
-    }
-
     pub fn accept_new_connection(&mut self, reg: &Registry) -> Result<(), Error> {
         loop {
             match self.listener.accept() {
@@ -133,6 +102,20 @@ impl Server {
                                 .unwrap(),
                         ),
                     };
+
+                    unsafe {
+                        let optval: libc::c_int = 1;
+                        let ret = libc::setsockopt(
+                            socket.as_raw_fd(),
+                            libc::SOL_SOCKET,
+                            libc::SO_REUSEPORT,
+                            &optval as *const _ as *const libc::c_void,
+                            mem::size_of_val(&optval) as libc::socklen_t,
+                        );
+                        if ret != 0 {
+                            return Err(io::Error::last_os_error());
+                        }
+                    }
 
                     let token = Token(self.next_id);
                     self.next_id += 1;

@@ -452,6 +452,7 @@ dependencies = [
  "colored",
  "flate2",
  "lazy_static",
+ "libc",
  "md5",
  "mio",
  "regex",

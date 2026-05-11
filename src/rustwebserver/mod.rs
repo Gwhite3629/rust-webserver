@@ -26,6 +26,7 @@ pub use defaultfields::DefaultFields;
 pub use core::Processor;
 pub use core::Server;
 pub use core::tls_setup;
+pub use core::LISTENER;
 pub use thread::ThreadPool;
 
 pub use config::Auth;
