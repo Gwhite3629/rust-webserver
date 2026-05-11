@@ -1,8 +1,35 @@
-use std::path::{Path, PathBuf};
+use std::path::{Path, PathBuf, Component};
 
 use crate::Auth;
 
 use crate::CONFIG;
+
+pub fn normalize_path(path: &Path) -> PathBuf {
+    let mut components = path.components().peekable();
+    let mut ret = if let Some(c @ Component::Prefix(..)) = components.peek().cloned() {
+        components.next();
+        PathBuf::from(c.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+
+    for component in components {
+        match component {
+            Component::Prefix(..) => unreachable!(),
+            Component::RootDir => {
+                ret.push(component.as_os_str());
+            }
+            Component::CurDir => {}
+            Component::ParentDir => {
+                ret.pop();
+            }
+            Component::Normal(c) => {
+                ret.push(c);
+            }
+        }
+    }
+    ret
+}
 
 pub fn is_valid_path(path: &Path, name: &String) -> bool {
     if !path.has_root() {
@@ -18,8 +45,8 @@ pub fn is_valid_path(path: &Path, name: &String) -> bool {
         return false;
     };
 
-    let resolved_base = base.canonicalize().unwrap();
-    let resolved_path = full_path.canonicalize().unwrap();
+    let resolved_base = normalize_path(base);
+    let resolved_path = normalize_path(full_path.as_path());
 
     if !resolved_path.starts_with(resolved_base) {
         return false;

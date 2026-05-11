@@ -65,7 +65,7 @@ pub fn start(name: String) {
             }
         }
 
-        let mut handles = vec![];
+        //let mut handles = vec![];
 
         for event in events.iter() {
             //println!("Got event");
@@ -79,7 +79,8 @@ pub fn start(name: String) {
                         .lock().unwrap()
                         .accept_new_connection(cloned_poll.lock().unwrap().registry()).expect("Error accepting connection.");
                     });
-                    handles.push(handle);
+                    //handles.push(handle);
+                    handle.join().unwrap();
                 },
                 _ => {
                     let handle = thread::spawn(move || {
@@ -87,12 +88,15 @@ pub fn start(name: String) {
                         .lock().unwrap()
                         .established_connection(cloned_poll.lock().unwrap().registry(), &cloned_event);
                     });
-                    handles.push(handle);
+                    //handles.push(handle);
+                    handle.join().unwrap();
                 },
             }
         }
+        /*
         for handle in handles {
             handle.join().unwrap();
         }
+        */
     }
 }
