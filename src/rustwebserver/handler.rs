@@ -1,5 +1,9 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 use crate::CaseInsensitiveString;
 use crate::HttpMethod;
@@ -78,7 +82,7 @@ pub union RequestState<'req> {
     pub auth: &'req AuthData,
 }
 
-type HttpMethodHandler = dyn Fn(HttpRequest, &mut ServerState) -> HttpResponse + Sync + Send;
+type HttpMethodHandler = dyn Fn(HttpRequest, Arc<Mutex<ServerState>>) -> HttpResponse + Sync + Send;
 
 pub type WriterType<'req> =
     Option<Box<dyn FnMut(&[u8]) -> Result<usize, std::io::Error> + Send + Sync + 'req>>;

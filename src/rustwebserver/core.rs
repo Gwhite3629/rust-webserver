@@ -1,12 +1,22 @@
 use std::{
     collections::HashMap,
-    io::{Error, ErrorKind, prelude::*},
-    net::Shutdown,
-    path::Path,
-    sync::Arc,
-    os::unix::io::AsRawFd,
+    io::{
+        self,
+        Error,
+        ErrorKind,
+        prelude::*
+    },
     mem,
-    io,
+    net::{
+        Shutdown,
+        SocketAddr,
+    },
+    path::Path,
+    sync::{
+        Arc,
+        Mutex
+    },
+    os::unix::io::AsRawFd,
 };
 
 use rustls::{
@@ -15,16 +25,19 @@ use rustls::{
 };
 
 use mio::{
-    Interest, Registry, Token,
-    event::Event,
-    net::{TcpListener, TcpStream},
+    Interest, Poll, Token, event::Event, net::{TcpListener, TcpStream}
 };
 
 use libc;
 
-use crate::{CONFIG, HttpProcessor, NonceTracker, config::Protocol, FileCache};
+use colored::Colorize;
+
+use crate::{CONFIG, FileCache, HttpProcessor, NonceTracker, config::Protocol};
 
 pub const LISTENER: mio::Token = mio::Token(0);
+
+//pub const HTTP2: &str = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+
 
 #[derive(Clone)]
 pub enum Processor {
@@ -38,13 +51,13 @@ pub struct ServerState {
 
 pub struct Server {
     name: String,
+    listener: Arc<Mutex<TcpListener>>,
     protocol: Protocol,
-    pub listener: TcpListener,
-    connections: HashMap<mio::Token, OpenConnection>,
-    next_id: usize,
+    connections: Arc<Mutex<HashMap<mio::Token, Arc<Mutex<OpenConnection>>>>>,
+    next_id: Arc<Mutex<usize>>,
     tls_config: Option<Arc<ServerConfig>>,
     engine: Processor,
-    state: ServerState,
+    state: Arc<Mutex<ServerState>>,
 }
 
 struct OpenConnection {
@@ -60,7 +73,7 @@ struct OpenConnection {
 }
 
 impl Server {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: String, listener: Arc<Mutex<TcpListener>>) -> Self {
         let mode = CONFIG
             .get()
             .unwrap()
@@ -75,29 +88,34 @@ impl Server {
             Protocol::HTTPS => Some(tls_setup(name.clone())),
         };
 
-        let listener =
-            match TcpListener::bind(CONFIG.get().unwrap().servers.get(&name).unwrap().addr) {
-                Ok(listener) => listener,
-                Err(error) => panic!("Problem binding TcpListener: {error:?}"),
-            };
-        let addr = listener.local_addr().unwrap();
+        let addr = listener.lock().unwrap().local_addr().unwrap();
         println!("{} is watching: {}", name, addr);
 
         Server {
             name,
-            protocol: mode.clone(),
             listener,
-            connections: HashMap::new(),
-            next_id: 2,
+            protocol: mode.clone(),
+            connections: Arc::new(Mutex::new(HashMap::new())),
+            next_id: Arc::new(Mutex::new(2)),
             tls_config,
             engine: mode.to_processor(),
-            state: ServerState { noncehandler: NonceTracker::new(), file_cache: FileCache::new() },
+            state: Arc::new(Mutex::new(ServerState { noncehandler: NonceTracker::new(), file_cache: FileCache::new() })),
         }
     }
 
-    pub fn accept_new_connection(&mut self, reg: &Registry) -> Result<(), Error> {
+    pub fn accept_new_connection(self: Arc<Self>, reg: Arc<Mutex<Poll>>) -> Result<(), Error> {
+        println!("Entered accept function");
         loop {
-            match self.listener.accept() {
+            // Hastily grab socket and unlock
+            let socket_res: Result<(TcpStream, SocketAddr), Error>;
+            match self.listener.lock() {
+                Ok(l) => {
+                    socket_res = l.accept();
+                },
+                Err(_) => panic!("Can't acquire listener"),
+            }
+
+            match socket_res {
                 Ok((socket, _)) => {
                     println!("Accepting new connection on {}", self.name);
                     let tls_conn = match self.protocol {
@@ -122,8 +140,15 @@ impl Server {
                         }
                     }
 
-                    let token = Token(self.next_id);
-                    self.next_id += 1;
+                    let token: Token;
+
+                    match self.next_id.lock() {
+                        Ok(mut i) => {
+                            token = Token(*i);
+                            *i = *i + 1;
+                        },
+                        Err(_) => panic!("Couldn't acquire lock"),
+                    }
 
                     let mut connection = OpenConnection::new(
                         self.name.clone(),
@@ -132,8 +157,13 @@ impl Server {
                         tls_conn,
                         self.engine.clone(),
                     );
-                    connection.register(reg);
-                    self.connections.insert(token, connection);
+                    connection.register(reg.clone());
+                    match self.connections.lock() {
+                        Ok(mut c) => {
+                            c.insert(token, Arc::new(Mutex::new(connection)));
+                        },
+                        Err(_) => panic!("Couldn't acquire lock"),
+                    };
                 }
                 Err(error) if error.kind() == ErrorKind::WouldBlock => return Ok(()),
                 Err(error) => {
@@ -143,19 +173,31 @@ impl Server {
             }
         }
     }
-    pub fn established_connection(&mut self, reg: &Registry, event: &Event) {
+    pub fn established_connection(self: Arc<Self>, reg: Arc<Mutex<Poll>>, event: &Event) {
         let token = event.token();
+        match self.connections.lock() {
+            Ok(mut c) => {
+                if c.contains_key(&token) {
+                    println!("Got established connection on {}", self.name);
 
-        if self.connections.contains_key(&token) {
-            println!("Got established connection on {}", self.name);
-            self.connections
-                .get_mut(&token)
-                .unwrap()
-                .ready(reg, event, &mut self.state);
+                    let mut cull_flag = false;
 
-            if self.connections[&token].is_closed() {
-                self.connections.remove(&token);
-            }
+                    let state_clone = Arc::clone(&self.state);
+                    match c.get(&token).unwrap().lock() {
+                        Ok(mut c) => {
+                            c.ready(reg, event, state_clone);
+                            if c.is_closed() {
+                                cull_flag = true;
+                            }
+                        },
+                        Err(_) => (),
+                    };
+                    if cull_flag {
+                        c.remove(&token);
+                    }
+                }
+            },
+            Err(_) => panic!("Couldn't acquire lock"),
         }
     }
 }
@@ -189,7 +231,7 @@ impl OpenConnection {
         }
     }
 
-    fn ready(&mut self, reg: &Registry, event: &Event, state: &mut ServerState) {
+    fn ready(&mut self, reg: Arc<Mutex<Poll>>, event: &Event, state: Arc<Mutex<ServerState>>) {
         if event.is_readable() {
             //println!("Reading event");
             match self.protocol {
@@ -199,6 +241,11 @@ impl OpenConnection {
                 Protocol::HTTPS => {
                     self.tls_read();
                     self.try_text_read_tls(state);
+                    if self.protocol == Protocol::HTTPS {
+                        println!("ALPN Protocol: {}", format!("{:#?}", String::from_utf8(self.tls_conn.as_ref().unwrap().alpn_protocol().unwrap().to_ascii_lowercase())).yellow());
+                        println!("TLS Protocol: {}", format!("{:#?}", self.tls_conn.as_ref().unwrap().protocol_version()).yellow());
+                        println!("Handshake type: {}", format!("{:#?}", self.tls_conn.as_ref().unwrap().handshake_kind()).yellow());
+                    }
                 }
             }
         }
@@ -255,7 +302,7 @@ impl OpenConnection {
         }
     }
 
-    fn try_text_read_tls(&mut self, state: &mut ServerState) {
+    fn try_text_read_tls(&mut self, state: Arc<Mutex<ServerState>>) {
         if let Ok(io_state) = self.tls_conn.as_mut().unwrap().process_new_packets() {
             //println!("got io_state");
             if let Some(mut early_data) = self.tls_conn.as_mut().unwrap().early_data() {
@@ -289,7 +336,7 @@ impl OpenConnection {
         }
     }
 
-    fn try_text_read(&mut self, state: &mut ServerState) {
+    fn try_text_read(&mut self, state: Arc<Mutex<ServerState>>) {
         let mut buf = vec![0u8; 4 * 1024];
         let n: usize;
         match self.socket.read(&mut buf) {
@@ -330,9 +377,7 @@ impl OpenConnection {
         }
     }
 
-    fn incoming_text(&mut self, buf: &[u8], state: &mut ServerState) {
-        //let print_str = String::from_utf8(buf.to_ascii_lowercase()).unwrap();
-        //println!("RAW TEXT:\n{print_str}");
+    fn incoming_text(&mut self, buf: &[u8], state: Arc<Mutex<ServerState>>) {
         match self.engine {
             Processor::HTTP => match self.protocol {
                 Protocol::HTTP => {
@@ -397,24 +442,39 @@ impl OpenConnection {
                     }
                     self.tls_conn.as_mut().unwrap().send_close_notify();
                 }
-            },
+            }
         };
     }
 
-    fn register(&mut self, reg: &Registry) {
+    fn register(&mut self, poll: Arc<Mutex<Poll>>) {
         let event_set = self.event_set();
-        reg.register(&mut self.socket, self.token, event_set)
-            .unwrap();
+        match poll.lock() {
+            Ok(p) => {
+                p.registry().register(&mut self.socket, self.token, event_set)
+                .unwrap();
+            },
+            Err(_) => (),
+        };
     }
 
-    fn reregister(&mut self, reg: &mio::Registry) {
+    fn reregister(&mut self, poll: Arc<Mutex<Poll>>) {
         let event_set = self.event_set();
-        reg.reregister(&mut self.socket, self.token, event_set)
-            .unwrap();
+        match poll.lock() {
+            Ok(p) => {
+                p.registry().reregister(&mut self.socket, self.token, event_set)
+                .unwrap();
+            },
+            Err(_) => (),
+        };
     }
 
-    fn deregister(&mut self, reg: &Registry) {
-        reg.deregister(&mut self.socket).unwrap();
+    fn deregister(&mut self, poll: Arc<Mutex<Poll>>) {
+        match poll.lock() {
+            Ok(p) => {
+                p.registry().deregister(&mut self.socket).unwrap();
+            },
+            Err(_) => (),
+        };
     }
 
     fn event_set(&self) -> Interest {
@@ -472,10 +532,12 @@ pub fn tls_setup(name: String) -> Arc<ServerConfig> {
             .unwrap(),
     );
 
-    let config = ServerConfig::builder()
+    let mut config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, privkey)
         .expect("bad certificates or private key");
+
+    config.alpn_protocols = vec![b"http/1.1".to_vec(), b"http/1.0".to_vec()];
 
     Arc::new(config)
 }

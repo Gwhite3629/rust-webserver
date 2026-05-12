@@ -1,5 +1,9 @@
 
 use std::path::Path;
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 use crate::cache::{CacheTry, CacheType};
 use crate::{HttpResponse, ServerState};
@@ -19,7 +23,7 @@ use crate::config::CONFIG;
 
 use colored::Colorize;
 
-fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpResponse {
+fn __internal_process<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) -> HttpResponse {
     let mut currentstatus: HttpStatus;
     let mut headers = HttpFields::new();
 
@@ -111,21 +115,31 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
     match auth {
         Some(a) => {
             // Remove nonce after 100 requests
-            let t = state.noncehandler.map.get(&a.name);
-            if t.is_some() {
-                if t.unwrap().n >= 100 {
-                    state.noncehandler.map.remove(&a.name);
-                    dval = None;
-                }
+            match state.lock() {
+                Ok(mut s) => {
+                    let t = s.noncehandler.map.get(&a.name);
+                    if t.is_some() {
+                        if t.unwrap().n >= 100 {
+                            s.noncehandler.map.remove(&a.name);
+                            dval = None;
+                        }
+                    }
+                },
+                Err(_) => (),
             }
             // Check if realm matches request and send new 401 if it doesn't
             match dval {
                 Some(d) => match dfun {
                     Some(func) => {
                         let realm = a.name.clone();
-                        let nonce = match state.noncehandler.get(&a.name) {
-                            Some(n) => Some(n.val.clone()),
-                            None => None,
+                        let nonce = match state.lock() {
+                            Ok(mut s) => {
+                                match s.noncehandler.get(&a.name) {
+                                    Some(n) => Some(n.val.clone()),
+                                    None => None,
+                                }
+                            }
+                            Err(_) => None,
                         };
                         let userauth = UserAuth {
                             user: a.user,
@@ -168,13 +182,19 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
                                                             format!("{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
                                                             AuthType::as_str(&a.method),
                                                             a.name,
-                                                            match state.noncehandler.get(&a.name) {
-                                                                Some(a) => a.val.clone(),
-                                                                None => {
-                                                                    state.noncehandler.insert(a.name.clone());
-                                                                    state.noncehandler.get(&a.name).unwrap().val.clone()
+                                                            match state.lock() {
+                                                                Ok(mut s) => {
+                                                                    match s.noncehandler.get(&a.name) {
+                                                                        Some(a) => a.val.clone(),
+                                                                        None => {
+                                                                            s.noncehandler.insert(a.name.clone());
+                                                                            s.noncehandler.get(&a.name).unwrap().val.clone()
+                                                                        },
+                                                                    }
                                                                 },
-                                                            },) .as_str());
+                                                                Err(_) => panic!("Couldn't acquire lock"),
+                                                            }
+                                                        ) .as_str());
                                             }
                                         };
                                         read_file = false;
@@ -208,15 +228,19 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
                                     "{} realm=\"{}\",qop=\"auth\",nonce=\"{}\",",
                                     AuthType::as_str(&a.method),
                                     a.name,
-                                    match state.noncehandler.get(&a.name) {
-                                        Some(a) => a.val.clone(),
-                                        None => {
-                                            state.noncehandler.insert(a.name.clone());
-                                            state.noncehandler.get(&a.name).unwrap().val.clone()
-                                        }
-                                    },
-                                )
-                                .as_str(),
+                                    match state.lock() {
+                                        Ok(mut s) => {
+                                            match s.noncehandler.get(&a.name) {
+                                                Some(a) => a.val.clone(),
+                                                None => {
+                                                    s.noncehandler.insert(a.name.clone());
+                                                    s.noncehandler.get(&a.name).unwrap().val.clone()
+                                                }
+                                            }
+                                        },
+                                        Err(_) => panic!("Couldn't acquire lock"),
+                                    }
+                                ).as_str(),
                             );
                         }
                     };
@@ -247,58 +271,62 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
 
     // Read file and write contents to buffer
     if read_file {
-        match state.file_cache.try_get(&final_path, &cache_type) {
-            CacheTry::GOTCORRECT(cont) => {
-                f = Some(&cont);
-                contents.extend_from_slice(f.unwrap());
+        match state.lock() {
+            Ok(mut s) =>
+                match s.file_cache.try_get(&final_path, &cache_type) {
+                    CacheTry::GOTCORRECT(cont) => {
+                        f = Some(&cont);
+                        contents.extend_from_slice(f.unwrap());
 
-                headers.insert("content-length", f.unwrap().len().to_string().as_str());
-                headers.insert("content-type", get_mimetype(&final_path).as_str());
-                headers.insert("transfer-encoding", "chunked");
+                        headers.insert("content-length", f.unwrap().len().to_string().as_str());
+                        headers.insert("content-type", get_mimetype(&final_path).as_str());
+                        headers.insert("transfer-encoding", "chunked");
 
-            }
-            CacheTry::GOTPLAIN(cont) => {
-                f = Some(&cont);
-
-                let mut contents_container = RequestState {
-                    contents: &mut contents,
-                };
-
-                let writer: WriterType;
-                writer = match wfun {
-                    Some(wfun) => match wval {
-                        Some(val) => {
-                            match wfun(val, &mut contents_container) {
-                                RequestEffect::WRITER(w) => w,
-                                RequestEffect::DECODER(_) => None,
-                            }
-                        }
-                        None => None,
-                    },
-                    None => None,
-                };
-
-                //let mut gzip_writer = GzEncoder::new(&mut contents, Compression::default());
-                if writer.is_some() {
-                    match writer.unwrap()(f.unwrap()) {
-                        Ok(result) => {
-                            headers.insert("content-length", result.to_string().as_str());
-                            headers.insert("content-type", get_mimetype(&final_path).as_str());
-                            headers.insert("transfer-encoding", "chunked");
-                        }
-                        Err(error) => panic!("Could not write response content: {error:?}"),
                     }
-                } else {
-                    currentstatus = HttpStatus::InternalServerError;
-                }
-                cache_write = true;
-            }
-            CacheTry::FAIL => {
-                println!("{currentstatus:#?}");
-                if (currentstatus != HttpStatus::Unauthorized) & (currentstatus != HttpStatus::Forbidden) {
-                    currentstatus = HttpStatus::BadRequest;
-                }
-            },
+                    CacheTry::GOTPLAIN(cont) => {
+                        f = Some(&cont);
+
+                        let mut contents_container = RequestState {
+                            contents: &mut contents,
+                        };
+
+                        let writer: WriterType;
+                        writer = match wfun {
+                            Some(wfun) => match wval {
+                                Some(val) => {
+                                    match wfun(val, &mut contents_container) {
+                                        RequestEffect::WRITER(w) => w,
+                                        RequestEffect::DECODER(_) => None,
+                                    }
+                                }
+                                None => None,
+                            },
+                            None => None,
+                        };
+
+                        //let mut gzip_writer = GzEncoder::new(&mut contents, Compression::default());
+                        if writer.is_some() {
+                            match writer.unwrap()(f.unwrap()) {
+                                Ok(result) => {
+                                    headers.insert("content-length", result.to_string().as_str());
+                                    headers.insert("content-type", get_mimetype(&final_path).as_str());
+                                    headers.insert("transfer-encoding", "chunked");
+                                }
+                                Err(error) => panic!("Could not write response content: {error:?}"),
+                            }
+                        } else {
+                            currentstatus = HttpStatus::InternalServerError;
+                        }
+                        cache_write = true;
+                    }
+                    CacheTry::FAIL => {
+                        println!("{currentstatus:#?}");
+                        if (currentstatus != HttpStatus::Unauthorized) & (currentstatus != HttpStatus::Forbidden) {
+                            currentstatus = HttpStatus::BadRequest;
+                        }
+                    },
+                },
+            Err(_) => panic!("Couldn't acquire lock"),
         }
     } else {
         println!("{currentstatus:#?}");
@@ -308,7 +336,12 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
     }
 
     if cache_write {
-        state.file_cache.cache(final_path.clone(), cache_type, contents.clone());
+        match state.lock() {
+            Ok(mut s) => {
+                s.file_cache.cache(final_path.clone(), cache_type, contents.clone());
+            },
+            Err(_) => (),
+        }
     }
 
     HttpResponse {
@@ -319,7 +352,7 @@ fn __internal_process<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRe
     }
 }
 
-pub fn handle_get<'req>(req: HttpRequest, state: &mut ServerState) -> HttpResponse {
+pub fn handle_get<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) -> HttpResponse {
     let res = __internal_process(req, state);
 
     HttpResponse {
@@ -330,7 +363,7 @@ pub fn handle_get<'req>(req: HttpRequest, state: &mut ServerState) -> HttpRespon
     }
 }
 
-pub fn handle_head(req: HttpRequest, state: &mut ServerState) -> HttpResponse {
+pub fn handle_head(req: HttpRequest, state: Arc<Mutex<ServerState>>) -> HttpResponse {
     let res = __internal_process(req, state);
 
     HttpResponse {
@@ -341,11 +374,11 @@ pub fn handle_head(req: HttpRequest, state: &mut ServerState) -> HttpResponse {
     }
 }
 
-pub fn handle_options(_req: HttpRequest, _state: &mut ServerState) -> HttpResponse {
+pub fn handle_options(_req: HttpRequest, _state: Arc<Mutex<ServerState>>) -> HttpResponse {
     HttpResponse::new()
 }
 
-pub fn handle_trace(req: HttpRequest, _state: &mut ServerState) -> HttpResponse {
+pub fn handle_trace(req: HttpRequest, _state: Arc<Mutex<ServerState>>) -> HttpResponse {
     let mut currentstatus = HttpStatus::OK;
     let mut headers = HttpFields::new();
 

@@ -1,4 +1,8 @@
 use std::io::BufRead;
+use std::sync::{
+    Arc,
+    Mutex,
+};
 
 use crate::{CONFIG, HttpRequest, HttpResponse, ServerState};
 
@@ -15,7 +19,7 @@ impl HttpProcessor {
     pub fn handle_connection(
         buf: &[u8],
         name: String,
-        state: &mut ServerState,
+        state: Arc<Mutex<ServerState>>,
     ) -> Option<HttpResponse> {
         if buf.is_empty() {
             return None;

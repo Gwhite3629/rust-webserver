@@ -26,3 +26,4 @@ md5 = "0.8.0"
 mio = { version = "1.2.0", features = ["net", "os-poll"] }
 regex = "1.12.3"
 rustls = "0.23.40"
+socket2 = "0.6.3"
