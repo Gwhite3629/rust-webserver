@@ -53,7 +53,7 @@ pub struct Server {
     name: String,
     listener: Arc<Mutex<TcpListener>>,
     protocol: Protocol,
-    connections: Arc<Mutex<HashMap<mio::Token, Arc<Mutex<OpenConnection>>>>>,
+    connections: Arc<Mutex<HashMap<mio::Token, OpenConnection>>>,
     next_id: Arc<Mutex<usize>>,
     tls_config: Option<Arc<ServerConfig>>,
     engine: Processor,
@@ -160,7 +160,7 @@ impl Server {
                     connection.register(reg.clone());
                     match self.connections.lock() {
                         Ok(mut c) => {
-                            c.insert(token, Arc::new(Mutex::new(connection)));
+                            c.insert(token, connection);
                         },
                         Err(_) => panic!("Couldn't acquire lock"),
                     };
@@ -183,15 +183,11 @@ impl Server {
                     let mut cull_flag = false;
 
                     let state_clone = Arc::clone(&self.state);
-                    match c.get(&token).unwrap().lock() {
-                        Ok(mut c) => {
-                            c.ready(reg, event, state_clone);
-                            if c.is_closed() {
-                                cull_flag = true;
-                            }
-                        },
-                        Err(_) => (),
-                    };
+                    c.get_mut(&token).unwrap().ready(reg, event, state_clone);
+                    if c[&token].is_closed() {
+                        cull_flag = true;
+                    }
+                       
                     if cull_flag {
                         c.remove(&token);
                     }
