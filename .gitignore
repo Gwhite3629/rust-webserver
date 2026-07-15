@@ -18,6 +18,7 @@ resources
 *.pem
 *.csr
 *.srl
+*.p12
 
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can

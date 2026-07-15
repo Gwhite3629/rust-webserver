@@ -97,21 +97,9 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
         None => (),
     }
 
-    println!("After root redirect: {res_path:#?}");
-
     match redirects {
         Some(reds) => {
             for r in reds {
-                match r.redirect {
-                    Some(direct) => {
-                        res_path = PathBuf::from(res_path.to_string_lossy().replacen(
-                            r.req_path.to_str().unwrap(),
-                            direct.to_str().unwrap(),
-                            1,
-                        ));
-                    }
-                    None => (),
-                }
                 if set_auth == false {
                     if res_path
                         .to_string_lossy()
@@ -122,10 +110,20 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
                             Some(a) => {
                                 set_auth = true;
                                 auth = Some(a);
-                            }
+                            },
                             None => auth = None,
                         };
                     }
+                }
+                match r.redirect {
+                    Some(direct) => {
+                        res_path = PathBuf::from(res_path.to_string_lossy().replacen(
+                            r.req_path.to_str().unwrap(),
+                            direct.to_str().unwrap(),
+                            1,
+                        ));
+                    },
+                    None => (),
                 }
             }
         }

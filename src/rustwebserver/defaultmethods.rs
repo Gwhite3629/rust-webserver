@@ -42,12 +42,8 @@ fn __internal_process<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) ->
     let path = Path::new(base);
     let mut final_path: String;
 
-    println!("Unresolved path: {req_path:#?}");
-
     let (req_pathbuf, auth) = resolve_path(&req_path, &req.server_name);
     req_path = req_pathbuf.as_path();
-
-    println!("Resolved path: {req_path:#?}");
 
     if is_valid_path(&req_path, &req.server_name) {
         currentstatus = HttpStatus::OK;
