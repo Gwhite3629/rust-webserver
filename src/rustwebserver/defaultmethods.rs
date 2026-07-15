@@ -81,18 +81,18 @@ fn __internal_process<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) ->
             Some(fun) => {
                 match DefaultFields::from_string(key).unwrap() {
                     DefaultFields::ACCEPT => {
-                        println!("Got accept header.");
+                        //println!("Got accept header.");
                         //fun(val, &mut RequestState{path: &final_path});
                         ()
                     }
                     DefaultFields::ACCEPTENCODING => {
-                        println!("Parsing encoding:");
+                        //println!("Parsing encoding:");
                         wfun = Some(Box::new(fun));
                         wval = Some(val);
                         ()
                     }
                     DefaultFields::AUTHORIZATION => {
-                        println!("Parsing authorization:");
+                        //println!("Parsing authorization:");
                         dfun = Some(Box::new(fun));
                         dval = Some(val);
                         ()
@@ -399,12 +399,12 @@ pub fn handle_trace(req: HttpRequest, _state: Arc<Mutex<ServerState>>) -> HttpRe
             Some(fun) => {
                 match DefaultFields::from_string(key).unwrap() {
                     DefaultFields::ACCEPT => {
-                        println!("Got accept header.");
+                        //println!("Got accept header.");
                         //fun(val, &mut RequestState{path: &final_path});
                         ()
                     }
                     DefaultFields::ACCEPTENCODING => {
-                        println!("Parsing encoding:");
+                        //println!("Parsing encoding:");
                         wfun = Some(Box::new(fun));
                         wval = Some(val);
                         ()

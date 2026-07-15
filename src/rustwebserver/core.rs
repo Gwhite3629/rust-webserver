@@ -104,7 +104,7 @@ impl Server {
     }
 
     pub fn accept_new_connection(self: Arc<Self>, reg: Arc<Mutex<Poll>>) -> Result<(), Error> {
-        println!("Entered accept function");
+        //println!("Entered accept function");
         loop {
             // Hastily grab socket and unlock
             let socket_res: Result<(TcpStream, SocketAddr), Error>;
@@ -117,7 +117,7 @@ impl Server {
 
             match socket_res {
                 Ok((socket, _)) => {
-                    println!("Accepting new connection on {}", self.name);
+                    //println!("Accepting new connection on {}", self.name);
                     let tls_conn = match self.protocol {
                         Protocol::HTTP => None,
                         Protocol::HTTPS => Some(
@@ -178,7 +178,7 @@ impl Server {
         match self.connections.lock() {
             Ok(mut c) => {
                 if c.contains_key(&token) {
-                    println!("Got established connection on {}", self.name);
+                    //println!("Got established connection on {}", self.name);
 
                     let mut cull_flag = false;
 
@@ -238,9 +238,9 @@ impl OpenConnection {
                     self.tls_read();
                     self.try_text_read_tls(state);
                     if self.protocol == Protocol::HTTPS {
-                        println!("ALPN Protocol: {}", format!("{:#?}", String::from_utf8(self.tls_conn.as_ref().unwrap().alpn_protocol().unwrap().to_ascii_lowercase())).yellow());
-                        println!("TLS Protocol: {}", format!("{:#?}", self.tls_conn.as_ref().unwrap().protocol_version()).yellow());
-                        println!("Handshake type: {}", format!("{:#?}", self.tls_conn.as_ref().unwrap().handshake_kind()).yellow());
+                        //println!("ALPN Protocol: {}", format!("{:#?}", String::from_utf8(self.tls_conn.as_ref().unwrap().alpn_protocol().unwrap().to_ascii_lowercase())).yellow());
+                        //println!("TLS Protocol: {}", format!("{:#?}", self.tls_conn.as_ref().unwrap().protocol_version()).yellow());
+                        //println!("Handshake type: {}", format!("{:#?}", self.tls_conn.as_ref().unwrap().handshake_kind()).yellow());
                     }
                 }
             }

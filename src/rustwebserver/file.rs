@@ -195,6 +195,9 @@ pub fn get_mimetype(file: &String) -> String {
         "woff" => "font/woff",
         "woff2" => "font/woff2",
 
+        // Applications
+        "php" => "application/x-httpd-php",
+
         // For unknown types, use a safe default
         _ => "application/octet-stream",
     };

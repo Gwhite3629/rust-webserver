@@ -78,7 +78,7 @@ pub fn start(name: String) {
             Err(_) => panic!("Couldn't acquire lock"),
         }
 
-        println!("Got out of poll");
+        //println!("Got out of poll");
 
         for event in events.iter() {
             //println!("Got event");
@@ -88,7 +88,7 @@ pub fn start(name: String) {
             match event.token() {
                 LISTENER => {
                     let handle = thread::spawn(move || {
-                        println!("Attempting to accept connection");
+                        //println!("Attempting to accept connection");
                         cloned_server
                         .accept_new_connection(cloned_poll_reg).expect("Error accepting connection.");
                     });
