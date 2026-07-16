@@ -36,7 +36,12 @@ pub fn is_valid_path(path: &Path, name: &String) -> bool {
         return false;
     };
 
-    let base = Path::new(&CONFIG.get().unwrap().servers.get(name).unwrap().path);
+    let base = Path::new(
+        match &CONFIG.get().unwrap().servers.get(name).unwrap().path {
+            Some(p) => p.as_ref(),
+            None => "",
+        }
+    );
     let full_path = base.join(path.strip_prefix("/").unwrap());
 
     println!("Full Path: {full_path:#?}");

@@ -31,13 +31,16 @@ fn __internal_process<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) ->
 
     let mut req_path = Path::new(req.target.path.as_str());
     let base = Path::new(
-        &CONFIG
+        match &CONFIG
             .get()
             .unwrap()
             .servers
             .get(&req.server_name)
             .unwrap()
-            .path,
+            .path {
+                Some(p) => p.as_ref(),
+                None => "",
+            },
     );
     let path = Path::new(base);
     let mut final_path: String;

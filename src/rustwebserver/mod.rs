@@ -6,6 +6,7 @@ mod handler;
 mod request;
 mod response;
 mod thread;
+mod proxy;
 
 mod http;
 
@@ -24,6 +25,9 @@ pub use http::HttpStatus;
 pub use http::URI;
 
 pub use defaultfields::DefaultFields;
+
+pub use proxy::Proxy;
+pub use proxy::ProxyProcessor;
 
 pub use core::Processor;
 pub use core::Server;

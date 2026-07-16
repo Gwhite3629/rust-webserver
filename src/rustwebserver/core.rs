@@ -32,7 +32,7 @@ use libc;
 
 use colored::Colorize;
 
-use crate::{CONFIG, FileCache, HttpProcessor, NonceTracker, config::Protocol};
+use crate::{CONFIG, FileCache, HttpProcessor, NonceTracker, config::Protocol, ProxyProcessor};
 
 pub const LISTENER: mio::Token = mio::Token(0);
 
@@ -41,6 +41,7 @@ pub const LISTENER: mio::Token = mio::Token(0);
 
 #[derive(Clone)]
 pub enum Processor {
+    PROXY,
     HTTP,
 }
 
@@ -88,6 +89,13 @@ impl Server {
             Protocol::HTTPS => Some(tls_setup(name.clone())),
         };
 
+        let engine: Processor;
+        if CONFIG.get().unwrap().servers.get(&name).unwrap().proxy.is_some() {
+            engine = Processor::PROXY;
+        } else {
+            engine = mode.to_processor();
+        }
+
         let addr = listener.lock().unwrap().local_addr().unwrap();
         println!("{} is watching: {}", name, addr);
 
@@ -98,7 +106,7 @@ impl Server {
             connections: Arc::new(Mutex::new(HashMap::new())),
             next_id: Arc::new(Mutex::new(2)),
             tls_config,
-            engine: mode.to_processor(),
+            engine,
             state: Arc::new(Mutex::new(ServerState { noncehandler: NonceTracker::new(), file_cache: FileCache::new() })),
         }
     }
@@ -237,11 +245,9 @@ impl OpenConnection {
                 Protocol::HTTPS => {
                     self.tls_read();
                     self.try_text_read_tls(state);
-                    if self.protocol == Protocol::HTTPS {
                         //println!("ALPN Protocol: {}", format!("{:#?}", String::from_utf8(self.tls_conn.as_ref().unwrap().alpn_protocol().unwrap().to_ascii_lowercase())).yellow());
                         //println!("TLS Protocol: {}", format!("{:#?}", self.tls_conn.as_ref().unwrap().protocol_version()).yellow());
                         //println!("Handshake type: {}", format!("{:#?}", self.tls_conn.as_ref().unwrap().handshake_kind()).yellow());
-                    }
                 }
             }
         }
@@ -375,6 +381,16 @@ impl OpenConnection {
 
     fn incoming_text(&mut self, buf: &[u8], state: Arc<Mutex<ServerState>>) {
         match self.engine {
+            Processor::PROXY => {
+                let res = match ProxyProcessor::handle_connection(
+                    buf,
+                    self.name.clone(),
+                    state,
+                ) {
+                    Some(res) => res,
+                    None => return,
+                };
+            },
             Processor::HTTP => match self.protocol {
                 Protocol::HTTP => {
                     let res = match HttpProcessor::handle_connection(
