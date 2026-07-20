@@ -1,6 +1,9 @@
 use std::path::{Path, PathBuf, Component};
 
+use regex::Replacer;
+
 use crate::Auth;
+use crate::RedirectType;
 
 use crate::CONFIG;
 
@@ -87,10 +90,22 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
 
     match root_redirect {
         Some(red) => {
-            res_path = red
-                .redirect
-                .unwrap()
-                .join(res_path.strip_prefix("/").unwrap());
+            match red.rtype {
+                RedirectType::PATH => {
+                    res_path = red
+                        .redirect
+                        .unwrap()
+                        .join(res_path.strip_prefix("/").unwrap());
+                },
+                RedirectType::ABSOLUTE => {
+                    if res_path.ends_with(red.req_path.to_str().unwrap()) {
+                        res_path = red
+                            .redirect
+                            .unwrap()
+                            .join(res_path.strip_prefix("/").unwrap());
+                    }
+                },
+            }
             match red.auth {
                 Some(a) => {
                     set_auth = true;
@@ -105,30 +120,66 @@ pub fn resolve_path(req_path: &Path, name: &String) -> (PathBuf, Option<Auth>) {
     match redirects {
         Some(reds) => {
             for r in reds {
-                if set_auth == false {
-                    if res_path
-                        .to_string_lossy()
-                        .to_string()
-                        .contains(r.req_path.to_str().unwrap())
-                    {
-                        match r.auth {
-                            Some(a) => {
-                                set_auth = true;
-                                auth = Some(a);
+                match r.rtype {
+                    RedirectType::PATH => {
+                        if set_auth == false {
+                            if res_path
+                                .to_string_lossy()
+                                .to_string()
+                                .contains(r.req_path.to_str().unwrap())
+                            {
+                                match r.auth {
+                                    Some(a) => {
+                                        set_auth = true;
+                                        auth = Some(a);
+                                    },
+                                    None => auth = None,
+                                };
+                            }
+                        }
+                        match r.redirect {
+                            Some(direct) => {
+                                res_path = PathBuf::from(res_path.to_string_lossy().replacen(
+                                    r.req_path.to_str().unwrap(),
+                                    direct.to_str().unwrap(),
+                                    1,
+                                ));
                             },
-                            None => auth = None,
-                        };
-                    }
-                }
-                match r.redirect {
-                    Some(direct) => {
-                        res_path = PathBuf::from(res_path.to_string_lossy().replacen(
-                            r.req_path.to_str().unwrap(),
-                            direct.to_str().unwrap(),
-                            1,
-                        ));
+                            None => (),
+                        }
                     },
-                    None => (),
+                    RedirectType::ABSOLUTE => {
+                        if set_auth == false {
+                            if res_path
+                                .to_string_lossy()
+                                .to_string()
+                                .ends_with(r.req_path.to_str().unwrap())
+                            {
+                                match r.auth {
+                                    Some(a) => {
+                                        set_auth = true;
+                                        auth = Some(a);
+                                    },
+                                    None => auth = None,
+                                };
+                            }
+                        }
+                        match r.redirect {
+                            Some(direct) => {
+                                res_path = PathBuf::from(res_path.to_string_lossy().replacen(
+                                    r.req_path.to_str().unwrap(),
+                                    direct.to_str().unwrap(),
+                                    1,
+                                ));
+                                if res_path.ends_with(r.req_path.to_str().unwrap()) {
+                                    res_path = PathBuf::from(
+                                        res_path.to_string_lossy().replace(r.req_path.to_str().unwrap(),
+                                        direct.to_str().unwrap()));
+                                }
+                            },
+                            None => (),
+                        }
+                    },
                 }
             }
         }

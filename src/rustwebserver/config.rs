@@ -74,9 +74,25 @@ pub struct Auth {
     pub user: String,
     pub pass: String,
 }
+#[derive(PartialEq, Clone, Debug)]
+pub enum RedirectType {
+    PATH,
+    ABSOLUTE,
+}
 
+impl RedirectType {
+    pub fn from_str(rtype: &str) -> Option<RedirectType>{
+        let rtype = rtype.to_uppercase();
+        match rtype.as_str() {
+            "PATH" => Some(RedirectType::PATH),
+            "ABSOLUTE" => Some(RedirectType::ABSOLUTE),
+            _ => None,
+        }
+    }
+}
 #[derive(PartialEq, Clone, Debug)]
 pub struct Redirect {
+    pub rtype: RedirectType,
     pub req_path: PathBuf,
     pub redirect: Option<PathBuf>,
     pub auth: Option<Auth>,
@@ -176,6 +192,7 @@ impl HttpConfig {
                 redirects = Some(Vec::new());
                 for r in raw {
                     let p: PathBuf;
+                    let mut rt: Option<RedirectType> = None;
                     let mut t: Option<PathBuf> = None;
                     let mut a: Option<AuthType> = None;
                     let mut name = String::new();
@@ -191,6 +208,7 @@ impl HttpConfig {
                         .collect();
                     for (left, right) in pairs {
                         match left.to_uppercase().as_str() {
+                            "TYPE" => rt = Some(RedirectType::from_str(right.trim()).unwrap()),
                             "REDIRECT" => t = Some(PathBuf::from(right.trim())),
                             "AUTH" => a = Some(AuthType::from_str(right.trim()).unwrap()),
                             "NAME" => name = right.trim().to_string(),
@@ -201,6 +219,7 @@ impl HttpConfig {
                     }
 
                     let red = Redirect {
+                        rtype: rt.unwrap(),
                         req_path: p,
                         redirect: t,
                         auth: match a {
@@ -345,6 +364,7 @@ impl GlobalConfig {
                     false => proxies.push(Some(a)),
                 }
             } else {
+                proxies.push(None);
                 let mut a: Vec<&str> = c.split("Location:").collect();
                 configs.push(a.first().unwrap());
                 a.remove(0);

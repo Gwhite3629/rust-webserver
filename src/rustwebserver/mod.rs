@@ -43,6 +43,7 @@ pub use config::AuthType;
 pub use config::CONFIG;
 pub use config::GlobalConfig;
 pub use config::HttpConfig;
+pub use config::RedirectType;
 pub use handler::DecoderType;
 pub use handler::HttpFieldHandler;
 pub use handler::HttpFieldHandlerTable;
