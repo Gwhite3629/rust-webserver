@@ -405,9 +405,9 @@ impl OpenConnection {
                     }
                     for chunk in HttpProcessor::to_chunks(res) {
                         let mut e: ErrorKind = ErrorKind::WouldBlock;
-                        while e != ErrorKind::WouldBlock {
+                        while e == ErrorKind::WouldBlock {
                             match self.socket.write_all(&chunk) {
-                                Ok(_) => (),
+                                Ok(_) => e = ErrorKind::Other,
                                 Err(error) => {
                                     e = error.kind();
                                     if error.kind() == ErrorKind::BrokenPipe {
