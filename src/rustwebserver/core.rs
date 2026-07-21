@@ -273,7 +273,7 @@ impl OpenConnection {
     fn tls_read(&mut self) {
         match self.tls_conn.as_mut().unwrap().read_tls(&mut self.socket) {
             Err(error) => {
-                if let ErrorKind::WouldBlock = error.kind() {
+                if error.kind() == ErrorKind::WouldBlock {
                     //println!("Would block");
                     return;
                 }
@@ -341,7 +341,7 @@ impl OpenConnection {
         let n: usize;
         match self.socket.read(&mut buf) {
             Err(error) => {
-                if let ErrorKind::WouldBlock = error.kind() {
+                if error.kind() == ErrorKind::WouldBlock {
                     //println!("Would block");
                     return;
                 }
@@ -404,17 +404,23 @@ impl OpenConnection {
                         self.sent_http_response = true;
                     }
                     for chunk in HttpProcessor::to_chunks(res) {
-                        match self.socket.write_all(&chunk) {
-                            Ok(_) => (),
-                            Err(error) => {
-                                if let ErrorKind::BrokenPipe = error.kind() {
-                                    continue;
-                                }
+                        let mut ret = 1;
+                        while ret != 0 {
+                            match self.socket.write(&chunk) {
+                                Ok(s) => ret = s,
+                                Err(error) => {
+                                    if error.kind() == ErrorKind::BrokenPipe {
+                                        continue;
+                                    }
+                                    if error.kind() == ErrorKind::WouldBlock {
+                                        continue;
+                                    }
 
-                                // Log stuff
-                                println!("Write error: {error:?}");
-                                self.closing = true;
-                                return;
+                                    // Log stuff
+                                    println!("Write error: {error:?}");
+                                    self.closing = true;
+                                    return;
+                                }
                             }
                         }
                     }
@@ -460,7 +466,7 @@ impl OpenConnection {
                                     ret = s;
                                 },
                                 Err(error) => {
-                                    if let ErrorKind::WouldBlock = error.kind() {
+                                    if error.kind() == ErrorKind::WouldBlock {
                                         continue;
                                     }
                                     println!("Error: {}", error);
