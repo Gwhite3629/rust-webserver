@@ -1,7 +1,5 @@
 use std::path::{Path, PathBuf, Component};
 
-use regex::Replacer;
-
 use crate::Auth;
 use crate::RedirectType;
 

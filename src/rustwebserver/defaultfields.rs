@@ -62,11 +62,11 @@ pub fn default_accept_encoding<'req>(
     if val.contains("gzip") {
         let mut gz = GzEncoder::new(unsafe { &mut state.contents }, Compression::default());
         //println!("Using gzip encoding");
-        return RequestEffect::WRITER(Some(Box::new(move |f| gz.write(f.as_ref()))));
+        return RequestEffect::WRITER(Some(Box::new(move |f| gz.write_all(f.as_ref()))));
     } else {
         let mut bf = BufWriter::new(unsafe { &mut state.contents });
         //println!("Using identity encoding");
-        return RequestEffect::WRITER(Some(Box::new(move |f| bf.write(f.as_ref()))));
+        return RequestEffect::WRITER(Some(Box::new(move |f| bf.write_all(f.as_ref()))));
     };
 }
 

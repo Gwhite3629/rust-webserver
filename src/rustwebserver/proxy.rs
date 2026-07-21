@@ -5,7 +5,7 @@ use std::sync::{
     Mutex,
 };
 
-use crate::{CONFIG, HttpRequest, HttpResponse, ServerState, URI};
+use crate::{CONFIG, HttpRequest, ServerState, URI};
 
 #[derive(Debug, Clone)]
 pub struct Proxy {
@@ -27,7 +27,7 @@ impl ProxyProcessor {
     pub fn handle_connection(
         buf: &[u8],
         name: String,
-        state: Arc<Mutex<ServerState>>,
+        _state: Arc<Mutex<ServerState>>,
     ) -> Option<ProxyResponse> {
         if buf.is_empty() {
             return None;

@@ -43,7 +43,10 @@ impl FileCache {
         let mut buf_reader = BufReader::new(f.unwrap().ok().unwrap());
     
         match buf_reader.read_to_end(&mut content) {
-            Ok(_) => Some(content),
+            Ok(_) => {
+                println!("file_len: {}", content.len());
+                Some(content)
+            },
             Err(_) => None,
         }
 

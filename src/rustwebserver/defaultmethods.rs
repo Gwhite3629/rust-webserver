@@ -306,8 +306,7 @@ fn __internal_process<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) ->
                         //let mut gzip_writer = GzEncoder::new(&mut contents, Compression::default());
                         if writer.is_some() {
                             match writer.unwrap()(f.unwrap()) {
-                                Ok(result) => {
-                                    headers.insert("content-length", result.to_string().as_str());
+                                Ok(_) => {
                                     headers.insert("content-type", get_mimetype(&final_path).as_str());
                                     headers.insert("transfer-encoding", "chunked");
                                 }
@@ -342,6 +341,10 @@ fn __internal_process<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) ->
             Err(_) => (),
         }
     }
+
+    let len = contents.len();
+    println!("final_length: {}", len);
+    headers.insert("content-length", len.to_string().as_str());
 
     HttpResponse {
         version: req.version.clone(),
@@ -449,8 +452,7 @@ pub fn handle_trace(req: HttpRequest, _state: Arc<Mutex<ServerState>>) -> HttpRe
 
         if writer.is_some() {
             match writer.unwrap()(&file_contents) {
-                Ok(result) => {
-                    headers.insert("content-length", result.to_string().as_str());
+                Ok(_) => {
                     headers.insert("transfer-encoding", "chunked");
                 }
                 Err(error) => panic!("Could not write response content: {error:?}"),
@@ -459,6 +461,9 @@ pub fn handle_trace(req: HttpRequest, _state: Arc<Mutex<ServerState>>) -> HttpRe
             currentstatus = HttpStatus::InternalServerError;
         }
     }
+
+    let len = contents.len();
+    headers.insert("content-length", len.to_string().as_str());
 
     HttpResponse {
         version: req.version.clone(),

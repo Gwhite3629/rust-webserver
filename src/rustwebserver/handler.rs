@@ -85,7 +85,7 @@ pub union RequestState<'req> {
 type HttpMethodHandler = dyn Fn(HttpRequest, Arc<Mutex<ServerState>>) -> HttpResponse + Sync + Send;
 
 pub type WriterType<'req> =
-    Option<Box<dyn FnMut(&[u8]) -> Result<usize, std::io::Error> + Send + Sync + 'req>>;
+    Option<Box<dyn FnMut(&[u8]) -> Result<(), std::io::Error> + Send + Sync + 'req>>;
 pub type DecoderType<'req> =
     Option<Box<dyn FnMut(&UserAuth) -> UserAuthResult + Send + Sync + 'req>>;
 

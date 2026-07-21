@@ -30,8 +30,6 @@ use mio::{
 
 use libc;
 
-use colored::Colorize;
-
 use crate::{CONFIG, FileCache, HttpProcessor, NonceTracker, config::Protocol, ProxyProcessor};
 
 pub const LISTENER: mio::Token = mio::Token(0);
@@ -382,7 +380,7 @@ impl OpenConnection {
     fn incoming_text(&mut self, buf: &[u8], state: Arc<Mutex<ServerState>>) {
         match self.engine {
             Processor::PROXY => {
-                let res = match ProxyProcessor::handle_connection(
+                let _res = match ProxyProcessor::handle_connection(
                     buf,
                     self.name.clone(),
                     state,
@@ -451,6 +449,7 @@ impl OpenConnection {
                             .writer()
                             .write(&chunk)
                             .unwrap();
+                        println!("chunksize: {}", chunk.len());
                     }
                     self.tls_conn.as_mut().unwrap().send_close_notify();
                 }
