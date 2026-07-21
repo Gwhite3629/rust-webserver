@@ -60,6 +60,8 @@ fn __internal_process<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) ->
         final_path = path.join("404.html").to_str().unwrap().to_string();
     }
 
+    println!("Requested resource: {}", final_path);
+
     // File to be sent to client
     let mut read_file: bool = true;
 
@@ -343,7 +345,7 @@ fn __internal_process<'req>(req: HttpRequest, state: Arc<Mutex<ServerState>>) ->
     }
 
     let len = contents.len();
-    println!("final_length: {}", len);
+    //println!("final_length: {}", len);
     headers.insert("content-length", len.to_string().as_str());
 
     HttpResponse {

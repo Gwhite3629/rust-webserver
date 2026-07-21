@@ -45,7 +45,7 @@ pub fn is_valid_path(path: &Path, name: &String) -> bool {
     );
     let full_path = base.join(path.strip_prefix("/").unwrap());
 
-    println!("Full Path: {full_path:#?}");
+    //println!("Full Path: {full_path:#?}");
 
     if !full_path.is_file() {
         return false;
@@ -58,7 +58,7 @@ pub fn is_valid_path(path: &Path, name: &String) -> bool {
         return false;
     };
 
-    println!("Final Path: {resolved_path:#?}");
+    //println!("Final Path: {resolved_path:#?}");
 
     return true;
 }

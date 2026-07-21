@@ -443,13 +443,30 @@ impl OpenConnection {
                         self.sent_http_response = true;
                     }
                     for chunk in HttpProcessor::to_chunks(res) {
-                        self.tls_conn
+                        match self.tls_conn
                             .as_mut()
                             .unwrap()
                             .writer()
                             .write(&chunk)
-                            .unwrap();
-                        println!("chunksize: {}", chunk.len());
+                            {
+                                Ok(_) => (),
+                                Err(error) => println!("Error: {}", error),
+                            }
+                        //let err = ErrorKind::WouldBlock;
+                        let mut ret = 1;
+                        while ret != 0 {
+                            match self.tls_conn.as_mut().unwrap().write_tls(&mut self.socket) {
+                                Ok(s) => {
+                                    ret = s;
+                                },
+                                Err(error) => {
+                                    if let ErrorKind::WouldBlock = error.kind() {
+                                        continue;
+                                    }
+                                    println!("Error: {}", error);
+                                },
+                            }
+                        }
                     }
                     self.tls_conn.as_mut().unwrap().send_close_notify();
                 }
