@@ -404,11 +404,12 @@ impl OpenConnection {
                         self.sent_http_response = true;
                     }
                     for chunk in HttpProcessor::to_chunks(res) {
-                        let mut ret = 1;
-                        while ret != 0 {
-                            match self.socket.write(&chunk) {
-                                Ok(s) => ret = s,
+                        let mut e: ErrorKind = ErrorKind::WouldBlock;
+                        while e != ErrorKind::WouldBlock {
+                            match self.socket.write_all(&chunk) {
+                                Ok(_) => (),
                                 Err(error) => {
+                                    e = error.kind();
                                     if error.kind() == ErrorKind::BrokenPipe {
                                         continue;
                                     }
